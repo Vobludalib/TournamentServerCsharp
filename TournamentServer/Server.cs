@@ -12,4 +12,10 @@ class TournamentServer()
 
         app.Run();
     }
+
+    /**
+    TODO:
+        Create all the endpoints with needed information
+        Create all the endpoints for changing games
+    **/
 }
