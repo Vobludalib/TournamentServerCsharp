@@ -8,7 +8,7 @@ class TournamentServer()
 
         var app = builder.Build();
 
-        app.MapGet("/", () => "");
+        app.MapGet("/", () => "Hello");
 
         app.Run();
     }
