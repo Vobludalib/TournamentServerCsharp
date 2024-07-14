@@ -1,0 +1,20 @@
+My goal is to make a system for managing bracketed tournaments.
+
+This system will be mainly for administrators wishing to have a centralised system, from which external applications can draw information (e.g. broadcast can have up-to-date graphics). As such, any and all interaction with the system will be either via the command prompt or HTTP Requests.
+
+The HTTP server will be using ASP.NET Core, handling the HTTP-side of the system, with my job focused on implementing the tournament logic and serialising/deserialising different tournament representations based on different JSON formats for tournaments.
+
+The system should be able to:
+Load a tournament (that might or might not be in progress) from a JSON file
+Save the tournament to a JSON file (for backing up or sending via HTTP)
+Allow editing of individual match states (update score, add/change additional information)
+When a state is edited (via HTTP requests), update the bracket based on this new information.
+Send certain information in a condensed manner via HTTP in JSON format (i.e. REST API to access certain info about the tournament)
+
+Inherently by virtue of being run on a web-server, there will be multithreading involved, as I will have to handle simultaneous requests that update the bracket in ways that may clash.
+
+A significant part of my time will likely be spent on sorting out serialising/deserialising different JSON formats, as there are many slightly different ones:
+https://github.com/openbracketformat/openbracketformat
+https://github.com/nhamonin/cyberscore-test-1 <- Most likely to be implemented, as it allows pretty simple visualisation of the bracket
+
+As you may have noticed, I have omitted actually creating the initial empty JSON for a tournament up to the end user. This may seem to be an oversight, but this is because of my experience with doing a similar project before. The creation of brackets that are not just a simple single-elimination bracket, when automated usually lead to subpar results for the tournament organiser, as the seeding is something they like to have fine control over. As such, it is better for TOs to create the initial JSON themselves or using some kind of automated tool that can serve as an extensions of this project (if this scope is deemed too simple or I need to bump up my kB count).
