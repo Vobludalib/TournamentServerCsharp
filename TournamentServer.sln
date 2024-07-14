@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TournamentServer", "TournamentServer\TournamentServer.csproj", "{12CB7F40-E764-41EF-9C90-D1D2C1B6DBAD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{12CB7F40-E764-41EF-9C90-D1D2C1B6DBAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12CB7F40-E764-41EF-9C90-D1D2C1B6DBAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12CB7F40-E764-41EF-9C90-D1D2C1B6DBAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12CB7F40-E764-41EF-9C90-D1D2C1B6DBAD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
