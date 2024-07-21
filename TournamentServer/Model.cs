@@ -13,14 +13,17 @@ public class Tournament
 {
     private Dictionary<string, Set> _sets { get; set; }
     private Dictionary<int, Entrant> _entrants { get; set; }
+    private Dictionary<string, string> _data { get; set; }
 
     public IReadOnlyDictionary<string, Set> Sets => _sets;
     public IReadOnlyDictionary<int, Entrant> Entrants => _entrants;
+    public IReadOnlyDictionary<string, string> Data => _data;
 
     public Tournament()
     {
         _sets = new Dictionary<string, Set>();
         _entrants = new Dictionary<int, Entrant>();
+        _data = new Dictionary<string, string>();
     }
 
     public bool AddSet(Set set)
@@ -48,7 +51,35 @@ public class Tournament
         {
             return false;
         }
+    }
 
+    public bool ModifyData(string label, string value)
+    {
+        try
+        {
+            if (_data.ContainsKey(label)) _data[label] = value;
+            else
+            {
+                _data.Add(label, value);
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public bool DeleteData(string label)
+    {
+        if (_data.ContainsKey(label))
+        {
+            _data.Remove(label); return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 }
 
@@ -57,17 +88,83 @@ public class Set
     private static List<Set> _sets;
 
     // Id here is a string, as there may be requests to use IDs that are more readable e.g. SF1, QF3
-    public string SetId;
-    public Entrant? Entrant1;
-    public Entrant? Entrant2;
-    public SetStatus Status;
-    public Set? SetWinnerGoesTo;
-    public Set? SetLoserGoesTo;
-    public Entrant? Winner;
-    public Entrant? Loser;
-    public List<Game> Games;
-    public IWinnerDecider? SetDecider;
-    public string? SetName;
+    private string _setId;
+    private Entrant? _entrant1;
+    private Entrant? _entrant2;
+    private SetStatus _status;
+    private Set? _setWinnerGoesTo;
+    private Set? _setLoserGoesTo;
+    private Entrant? _winner;
+    private Entrant? _loser;
+    private List<Game> _games;
+    private IWinnerDecider? _setDecider;
+    private string? _setName;
+
+    public string SetId
+    {
+        get => _setId;
+        set => _setId = value;
+    }
+
+    public Entrant? Entrant1
+    {
+        get => _entrant1;
+        set => _entrant1 = value;
+    }
+
+    public Entrant? Entrant2
+    {
+        get => _entrant2;
+        set => _entrant2 = value;
+    }
+
+    public SetStatus Status
+    {
+        get => _status;
+        set => _status = value;
+    }
+
+    public Set? SetWinnerGoesTo
+    {
+        get => _setWinnerGoesTo;
+        set => _setWinnerGoesTo = value;
+    }
+
+    public Set? SetLoserGoesTo
+    {
+        get => _setLoserGoesTo;
+        set => _setLoserGoesTo = value;
+    }
+
+    public Entrant? Winner
+    {
+        get => _winner;
+        set => _winner = value;
+    }
+
+    public Entrant? Loser
+    {
+        get => _loser;
+        set => _loser = value;
+    }
+
+    public List<Game> Games
+    {
+        get => _games;
+        set => _games = value;
+    }
+
+    public IWinnerDecider? SetDecider
+    {
+        get => _setDecider;
+        set => _setDecider = value;
+    }
+
+    public string? SetName
+    {
+        get => _setName;
+        set => _setName = value;
+    }
 
     public enum SetStatus { IncompleteSetup, WaitingForEntrantsData, WaitingForStart, InProgress, Finished }
 
@@ -80,15 +177,15 @@ public class Set
         if (_sets is null) _sets = new List<Set>();
         foreach (var set in _sets)
         {
-            if (set.SetId == id)
+            if (set._setId == id)
             {
                 throw new InvalidOperationException("Attempting to create a set with an already existing Id");
             }
         }
 
-        SetId = id;
-        Status = SetStatus.IncompleteSetup;
-        Games = new List<Game>();
+        _setId = id;
+        _status = SetStatus.IncompleteSetup;
+        _games = new List<Game>();
 
         _sets.Add(this);
     }
@@ -178,12 +275,12 @@ public abstract record class Entrant : IComparable<Entrant>
 {
 
     static protected List<Entrant>? _entrants;
-    public required int EntrantId { get; init; }
+    public int EntrantId { get; init; }
 
     // This is a dictionary, as we don't have a set promise from the JSON as to what information 
     // can or can't be included, instead we just store directly from the JSON and any parsing is done
     // when required
-    public required Dictionary<string, string> EntrantData { get; init; }
+    public Dictionary<string, string> EntrantData { get; init; }
 
     public int CompareTo(Entrant? other)
     {
@@ -196,7 +293,7 @@ public record class IndividualEntrant : Entrant
 {
     // This is kept as an EntrantName type - this is because I allow the JSON to specify the info
     // firstName, lastName if you want to store them seperately, or just name for a string name.
-    public required Name EntrantName { get; init; }
+    public Name EntrantName { get; init; }
 
     public abstract class Name
     {
@@ -253,6 +350,7 @@ public record class IndividualEntrant : Entrant
             }
         }
 
+        EntrantId = Id;
         EntrantName = new Tag(Tag);
 
         if (data is null) { data = new Dictionary<string, string>(); }
@@ -272,6 +370,7 @@ public record class IndividualEntrant : Entrant
             }
         }
 
+        EntrantId = Id;
         EntrantName = new FullName(FirstName, LastName);
 
         if (data is null) { data = new Dictionary<string, string>(); }
