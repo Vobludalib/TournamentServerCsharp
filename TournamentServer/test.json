@@ -1,0 +1,45 @@
+{
+  "sets": {
+    "Loser\u0027s Final": {
+      "setId": "Loser\u0027s Final",
+      "entrant1": 1,
+      "entrant2": 2,
+      "status": "IncompleteSetup",
+      "setWinnerGoesTo": "Grand Final",
+      "setLoserGoesTo": null,
+      "winner": null,
+      "loser": null,
+      "games": [],
+      "setDecider": null,
+      "setName": null
+    },
+    "Grand Final": {
+      "setId": "Grand Final",
+      "entrant1": 3,
+      "entrant2": null,
+      "status": "IncompleteSetup",
+      "setWinnerGoesTo": null,
+      "setLoserGoesTo": null,
+      "winner": null,
+      "loser": null,
+      "games": [],
+      "setDecider": null,
+      "setName": null
+    }
+  },
+  "entrants": {
+    "1": {
+      "entrantId": 1,
+      "entrantData": {}
+    },
+    "2": {
+      "entrantId": 2,
+      "entrantData": {}
+    },
+    "3": {
+      "entrantId": 3,
+      "entrantData": {}
+    }
+  },
+  "data": {}
+}

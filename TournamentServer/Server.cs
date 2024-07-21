@@ -4,16 +4,16 @@ namespace TournamentSystem;
 
 class TournamentServer()
 {
-    public static void Main(String[] args)
-    {
-        var builder = WebApplication.CreateBuilder(args);
+    // public static void Main(String[] args)
+    // {
+    //     var builder = WebApplication.CreateBuilder(args);
 
-        var app = builder.Build();
+    //     var app = builder.Build();
 
-        app.MapGet("/", () => "Hello");
+    //     app.MapGet("/", () => "Hello");
 
-        app.Run();
-    }
+    //     app.Run();
+    // }
 
     /**
     TODO:
