@@ -22,6 +22,34 @@ public class Tournament
         _sets = new Dictionary<string, Set>();
         _entrants = new Dictionary<int, Entrant>();
     }
+
+    public bool AddSet(Set set)
+    {
+        try
+        {
+            _sets.Add(set.SetId, set);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+
+    }
+
+    public bool AddEntrant(Entrant entrant)
+    {
+        try
+        {
+            _entrants.Add(entrant.EntrantId, entrant);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+
+    }
 }
 
 public class Set
@@ -43,6 +71,10 @@ public class Set
 
     public enum SetStatus { IncompleteSetup, WaitingForEntrantsData, WaitingForStart, InProgress, Finished }
 
+    // I only have a constructor with only ID, as the fields will be set later. This is because
+    // of the order in which a tournament must be reconstructed from JSON, but also
+    // because these fields will change inherently as a tournament progresses. An entrant on the other
+    // hand should not change once it is created, as it is immutable.
     public Set(string id)
     {
         if (_sets is null) _sets = new List<Set>();
@@ -61,11 +93,20 @@ public class Set
         _sets.Add(this);
     }
 
+    /// <summary>
+    /// IWinnerDecider is an interface used for specifying custom set-winner conditions.
+    /// 
+    /// E.g. tennis will have a WinnerDecider that works with the win-by-two condition, while most sports
+    /// just have a first to X wins condition.
+    /// </summary>
     public interface IWinnerDecider
     {
         public Entrant? DecideWinner(Entrant entrant1, Entrant entrant2, List<Game> games);
     }
 
+    /// <summary>
+    /// BestOfDecider models the behaviour of a best of X format, where X is specified when created.
+    /// </summary>
     public class BestOfDecider : IWinnerDecider
     {
         public int AmountOfWinsRequired;
