@@ -33,5 +33,12 @@ public class Program
             using (Utf8JsonWriter writer = new Utf8JsonWriter(fileStream))
                 mf.Write(writer, tour, new JsonSerializerOptions { WriteIndented = true });
         }
+
+        //PropertyNameCaseInsensitive: True
+        //JsonNamingPolicy: System.Text.Json.JsonCamelCaseNamingPolicy
+        //NumberHandling: AllowReadingFromString
+        byte[] jsonData = File.ReadAllBytes(filePath);
+        Utf8JsonReader reader = new(jsonData);
+        var reconstructedTour = mf.Read(ref reader, typeof(Tournament), new JsonSerializerOptions());
     }
 }
