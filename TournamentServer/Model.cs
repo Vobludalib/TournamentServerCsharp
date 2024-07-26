@@ -1,5 +1,7 @@
 ///Countable
 
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 namespace TournamentSystem;
 
 /**
@@ -11,17 +13,17 @@ TODO:
 
 public class Tournament
 {
-    private Dictionary<string, Set> _sets { get; set; }
+    private Dictionary<int, Set> _sets { get; set; }
     private Dictionary<int, Entrant> _entrants { get; set; }
     private Dictionary<string, string> _data { get; set; }
 
-    public IReadOnlyDictionary<string, Set> Sets => _sets;
+    public IReadOnlyDictionary<int, Set> Sets => _sets;
     public IReadOnlyDictionary<int, Entrant> Entrants => _entrants;
     public IReadOnlyDictionary<string, string> Data => _data;
 
     public Tournament()
     {
-        _sets = new Dictionary<string, Set>();
+        _sets = new Dictionary<int, Set>();
         _entrants = new Dictionary<int, Entrant>();
         _data = new Dictionary<string, string>();
     }
@@ -85,10 +87,10 @@ public class Tournament
 
 public class Set
 {
-    private static List<Set> _sets;
+    private static List<Set> _sets = new List<Set>();
 
     // Id here is a string, as there may be requests to use IDs that are more readable e.g. SF1, QF3
-    private string _setId;
+    private int _setId;
     private Entrant? _entrant1;
     private Entrant? _entrant2;
     private SetStatus _status;
@@ -100,7 +102,7 @@ public class Set
     private IWinnerDecider? _setDecider;
     private string? _setName;
 
-    public string SetId
+    public int SetId
     {
         get => _setId;
         set => _setId = value;
@@ -172,7 +174,7 @@ public class Set
     // of the order in which a tournament must be reconstructed from JSON, but also
     // because these fields will change inherently as a tournament progresses. An entrant on the other
     // hand should not change once it is created, as it is immutable.
-    public Set(string id)
+    public Set(int id)
     {
         if (_sets is null) _sets = new List<Set>();
         foreach (var set in _sets)
@@ -206,7 +208,13 @@ public class Set
     /// </summary>
     public class BestOfDecider : IWinnerDecider
     {
-        public int AmountOfWinsRequired;
+        public int AmountOfWinsRequired { get; init; }
+
+        public BestOfDecider(int requiredWins)
+        {
+            AmountOfWinsRequired = requiredWins;
+        }
+
         public Entrant? DecideWinner(Entrant entrant1, Entrant entrant2, List<Game> games)
         {
             int entrant1Wins = 0;
@@ -243,35 +251,44 @@ public class Set
 
 public class Game
 {
-    public readonly Set ParentSet;
-    public readonly int GameNumber;
-    // Stored seperately to the sets teams, as for certain games Team 1 and Team 2 may have meanings
+    public readonly Set _parentSet;
+    private readonly int _gameNumber;
+    // Stored separately to the sets teams, as for certain games Team 1 and Team 2 may have meanings
     // (e.g. side selection)
-    public readonly Entrant Entrant1;
-    public readonly Entrant Entrant2;
-    public Entrant? GameWinner;
+    private readonly Entrant _entrant1;
+    private readonly Entrant _entrant2;
+    private Entrant? _gameWinner;
+    private GameStatus _status;
 
-    public readonly GameStatus Status;
+    public int GameNumber => _gameNumber;
+    public Entrant Entrant1 => _entrant1;
+    public Entrant Entrant2 => _entrant2;
+    // Must be set via a method to allow for certain possible checks
+    public Entrant? GameWinner => _gameWinner;
+
+    public GameStatus Status => _status;
 
     public enum GameStatus { Waiting, InProgress, Finished }
 
     // Dictionary for the other data, stored as a string, and will be parsed when and if necessary
     // Given that the kind of data stored here can have a variety of formats, no point trying to parse here
     // The parsing can happen when and if needed when working with the game data.
-    public Dictionary<string, string> GameData;
+    private Dictionary<string, string> _gameData = new();
+    public Dictionary<string, string> GameData => _gameData;
 
     public Game(Set ParentSet, int GameNumber, Entrant Entrant1, Entrant Entrant2, Dictionary<string, string>? GameData = null)
     {
-        this.ParentSet = ParentSet;
-        this.GameNumber = GameNumber;
-        this.Entrant1 = Entrant1;
-        this.Entrant2 = Entrant2;
+        _parentSet = ParentSet;
+        _gameNumber = GameNumber;
+        _entrant1 = Entrant1;
+        _entrant2 = Entrant2;
         if (GameData is null) GameData = new Dictionary<string, string>();
-        this.GameData = GameData;
+        _gameData = GameData;
+        _status = GameStatus.Waiting;
     }
 }
 
-public abstract record class Entrant : IComparable<Entrant>
+public abstract record class Entrant
 {
 
     static protected List<Entrant>? _entrants;
@@ -280,13 +297,8 @@ public abstract record class Entrant : IComparable<Entrant>
     // This is a dictionary, as we don't have a set promise from the JSON as to what information 
     // can or can't be included, instead we just store directly from the JSON and any parsing is done
     // when required
-    public Dictionary<string, string> EntrantData { get; init; }
-
-    public int CompareTo(Entrant? other)
-    {
-        if (other == null) return 1;
-        return EntrantId.CompareTo(other.EntrantId);
-    }
+    protected Dictionary<string, string> _entrantData = new Dictionary<string, string>();
+    public Dictionary<string, string> EntrantData => _entrantData;
 }
 
 public record class IndividualEntrant : Entrant
@@ -354,7 +366,7 @@ public record class IndividualEntrant : Entrant
         EntrantName = new Tag(Tag);
 
         if (data is null) { data = new Dictionary<string, string>(); }
-        EntrantData = data;
+        _entrantData = data;
 
         _entrants.Add(this);
     }
@@ -374,7 +386,7 @@ public record class IndividualEntrant : Entrant
         EntrantName = new FullName(FirstName, LastName);
 
         if (data is null) { data = new Dictionary<string, string>(); }
-        EntrantData = data;
+        _entrantData = data;
 
         _entrants.Add(this);
     }

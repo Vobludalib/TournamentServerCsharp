@@ -1,20 +1,32 @@
 {
-  "sets": {
-    "Loser\u0027s Final": {
-      "setId": "Loser\u0027s Final",
+  "sets": [
+    {
+      "setId": 1,
       "entrant1": 1,
       "entrant2": 2,
       "status": "IncompleteSetup",
-      "setWinnerGoesTo": "Grand Final",
+      "setWinnerGoesTo": 2,
       "setLoserGoesTo": null,
       "winner": null,
       "loser": null,
-      "games": [],
-      "setDecider": null,
+      "games": [
+        {
+          "gameNumber": 1,
+          "entrant1": 1,
+          "entrant2": 2,
+          "gameWinner": null,
+          "status": "Waiting",
+          "gameData": {}
+        }
+      ],
+      "setDecider": {
+        "type": "BestOfDecider",
+        "amountOfWinsRequired": 3
+      },
       "setName": null
     },
-    "Grand Final": {
-      "setId": "Grand Final",
+    {
+      "setId": 2,
       "entrant1": 3,
       "entrant2": null,
       "status": "IncompleteSetup",
@@ -26,20 +38,22 @@
       "setDecider": null,
       "setName": null
     }
-  },
-  "entrants": {
-    "1": {
+  ],
+  "entrants": [
+    {
       "entrantId": 1,
-      "entrantData": {}
+      "entrantData": {
+        "dateOfBirth": "11/10/2004"
+      }
     },
-    "2": {
+    {
       "entrantId": 2,
       "entrantData": {}
     },
-    "3": {
+    {
       "entrantId": 3,
       "entrantData": {}
     }
-  },
+  ],
   "data": {}
 }
