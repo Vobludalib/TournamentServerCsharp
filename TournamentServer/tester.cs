@@ -1,6 +1,5 @@
 using System.Text.Json;
-
-namespace TournamentSystem;
+using TournamentSystem;
 
 public class Program
 {
@@ -28,11 +27,11 @@ public class Program
 
         var filePath = "./test.json";
         var mf = new MyFormatConverter();
-        using (FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
-        {
-            using (Utf8JsonWriter writer = new Utf8JsonWriter(fileStream))
-                mf.Write(writer, tour, new JsonSerializerOptions { WriteIndented = true });
-        }
+        // using (FileStream fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+        // {
+        //     using (Utf8JsonWriter writer = new Utf8JsonWriter(fileStream))
+        //         mf.Write(writer, tour, new JsonSerializerOptions { WriteIndented = true });
+        // }
 
         //PropertyNameCaseInsensitive: True
         //JsonNamingPolicy: System.Text.Json.JsonCamelCaseNamingPolicy

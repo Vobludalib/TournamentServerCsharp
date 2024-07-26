@@ -91,6 +91,7 @@ public class Set
 
     // Id here is a string, as there may be requests to use IDs that are more readable e.g. SF1, QF3
     private int _setId;
+    private string? _setName;
     private Entrant? _entrant1;
     private Entrant? _entrant2;
     private SetStatus _status;
@@ -100,12 +101,18 @@ public class Set
     private Entrant? _loser;
     private List<Game> _games;
     private IWinnerDecider? _setDecider;
-    private string? _setName;
+    private Dictionary<string, string> _data;
 
     public int SetId
     {
         get => _setId;
         set => _setId = value;
+    }
+
+    public string? SetName
+    {
+        get => _setName;
+        set => _setName = value;
     }
 
     public Entrant? Entrant1
@@ -162,10 +169,10 @@ public class Set
         set => _setDecider = value;
     }
 
-    public string? SetName
+    public Dictionary<string, string> Data
     {
-        get => _setName;
-        set => _setName = value;
+        get => _data;
+        set => _data = value;
     }
 
     public enum SetStatus { IncompleteSetup, WaitingForEntrantsData, WaitingForStart, InProgress, Finished }
@@ -185,6 +192,7 @@ public class Set
             }
         }
 
+        _data = new Dictionary<string, string>();
         _setId = id;
         _status = SetStatus.IncompleteSetup;
         _games = new List<Game>();
@@ -273,17 +281,17 @@ public class Game
     // Dictionary for the other data, stored as a string, and will be parsed when and if necessary
     // Given that the kind of data stored here can have a variety of formats, no point trying to parse here
     // The parsing can happen when and if needed when working with the game data.
-    private Dictionary<string, string> _gameData = new();
-    public Dictionary<string, string> GameData => _gameData;
+    private Dictionary<string, string> _data = new();
+    public Dictionary<string, string> Data => _data;
 
-    public Game(Set ParentSet, int GameNumber, Entrant Entrant1, Entrant Entrant2, Dictionary<string, string>? GameData = null)
+    public Game(Set ParentSet, int GameNumber, Entrant Entrant1, Entrant Entrant2, Dictionary<string, string>? Data = null)
     {
         _parentSet = ParentSet;
         _gameNumber = GameNumber;
         _entrant1 = Entrant1;
         _entrant2 = Entrant2;
-        if (GameData is null) GameData = new Dictionary<string, string>();
-        _gameData = GameData;
+        if (Data is null) _data = new Dictionary<string, string>();
+        _data = Data!;
         _status = GameStatus.Waiting;
     }
 }

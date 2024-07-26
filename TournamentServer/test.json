@@ -2,6 +2,7 @@
   "sets": [
     {
       "setId": 1,
+      "setName": null,
       "entrant1": 1,
       "entrant2": 2,
       "status": "IncompleteSetup",
@@ -16,17 +17,18 @@
           "entrant2": 2,
           "gameWinner": null,
           "status": "Waiting",
-          "gameData": {}
+          "data": null
         }
       ],
       "setDecider": {
         "type": "BestOfDecider",
         "amountOfWinsRequired": 3
       },
-      "setName": null
+      "data": {}
     },
     {
       "setId": 2,
+      "setName": null,
       "entrant1": 3,
       "entrant2": null,
       "status": "IncompleteSetup",
@@ -36,7 +38,7 @@
       "loser": null,
       "games": [],
       "setDecider": null,
-      "setName": null
+      "data": {}
     }
   ],
   "entrants": [

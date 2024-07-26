@@ -1,6 +1,6 @@
 ///Countable
 
-namespace TournamentSystem;
+using TournamentSystem;
 
 class TournamentServer()
 {
