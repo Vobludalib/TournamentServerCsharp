@@ -43,17 +43,39 @@
   ],
   "entrants": [
     {
-      "entrantId": 1,
-      "entrantData": {
-        "dateOfBirth": "11/10/2004"
-      }
-    },
-    {
-      "entrantId": 2,
+      "type": "IndividualEntrant",
+      "entrantId": 3,
+      "individualName": {
+        "firstName": "Alena",
+        "lastName": "Libricka"
+      },
       "entrantData": {}
     },
     {
-      "entrantId": 3,
+      "type": "TeamEntrant",
+      "entrantId": 4,
+      "individualEntrants": [
+        {
+          "type": "IndividualEntrant",
+          "entrantId": 1,
+          "individualName": {
+            "firstName": "Simon",
+            "lastName": "Libricky"
+          },
+          "entrantData": {
+            "dateOfBirth": "11/10/2004"
+          }
+        },
+        {
+          "type": "IndividualEntrant",
+          "entrantId": 2,
+          "individualName": {
+            "tag": "DonB"
+          },
+          "entrantData": {}
+        }
+      ],
+      "teamName": "Good team",
       "entrantData": {}
     }
   ],

@@ -294,6 +294,21 @@ public class Game
         _data = Data!;
         _status = GameStatus.Waiting;
     }
+
+    public void SetWinner(Entrant winner)
+    {
+        if (winner != Entrant1 && winner != Entrant2) throw new InvalidOperationException();
+        _gameWinner = winner;
+    }
+
+    /// <summary>
+    /// Overrides the checks - DO NOT USE UNLESS YOU ARE LOADING A GAME FROM SOMEWHERE
+    /// </summary>
+    /// <param name="status"></param>
+    internal void SetStatus(GameStatus status)
+    {
+        _status = status;
+    }
 }
 
 public abstract record class Entrant
@@ -325,7 +340,7 @@ public record class IndividualEntrant : Entrant
 
     public class Tag : Name
     {
-        private readonly string _tag;
+        internal readonly string _tag;
 
         public Tag(string tag)
         {
@@ -338,8 +353,8 @@ public record class IndividualEntrant : Entrant
 
     public class FullName : Name
     {
-        private readonly string _firstName;
-        private readonly string _lastName;
+        internal readonly string _firstName;
+        internal readonly string _lastName;
         public FullName(string firstName, string lastName)
         {
             _firstName = firstName;
@@ -402,10 +417,20 @@ public record class IndividualEntrant : Entrant
 
 public record class TeamEntrant : Entrant
 {
-    public required List<IndividualEntrant> IndividualEntrants { get; init; }
+
+    public List<IndividualEntrant> IndividualEntrants { get; init; }
+    public string? TeamName { get; init; }
+
+    public TeamEntrant(int Id, string? Name, List<IndividualEntrant> individualEntrants)
+    {
+        EntrantId = Id;
+        TeamName = Name;
+        IndividualEntrants = individualEntrants;
+    }
 
     public TeamEntrant(int Id, List<IndividualEntrant> individualEntrants)
     {
+        EntrantId = Id;
         IndividualEntrants = individualEntrants;
     }
 }

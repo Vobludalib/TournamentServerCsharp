@@ -1,10 +1,15 @@
 ///Countable
 
+using System.Data;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http.Json;
 
 namespace TournamentSystem;
 
@@ -68,7 +73,24 @@ public class MyFormatConverter : JsonConverter<Tournament>
 
     public override Tournament? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        var jsonSettings = new JsonSerializerOptions
+        {
+            Converters = {
+                new SetConverter(),
+                new GameConverter(),
+                new JsonStringEnumConverter<Set.SetStatus>(),
+                new JsonStringEnumConverter<Game.GameStatus>(),
+                new SetWinnerDeciderConverter(),
+                new EntrantConverter()
+            },
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+            NumberHandling = JsonNumberHandling.AllowReadingFromString,
+            PropertyNameCaseInsensitive = true
+        };
+
         List<SetLinksReport> setsToLink = new List<SetLinksReport>();
+        List<Entrant> entrants = new();
         Dictionary<string, string> data = new();
         while (reader.Read())
         {
@@ -91,7 +113,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                         reader.Read(); // Read the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            SetLinksReport report = sc.ReadIntoLinksReport(ref reader, typeof(Set), options);
+                            SetLinksReport report = sc.ReadIntoLinksReport(ref reader, typeof(Set), jsonSettings);
                             setsToLink.Add(report);
                             while (reader.TokenType != JsonTokenType.StartObject && reader.TokenType != JsonTokenType.EndArray)
                             {
@@ -101,7 +123,18 @@ public class MyFormatConverter : JsonConverter<Tournament>
                     }
                     else if (reader.GetString() == "entrants")
                     {
-
+                        reader.Read(); // Read the StartArray
+                        reader.Read(); // Read the StartObject
+                        while (reader.TokenType != JsonTokenType.EndArray)
+                        {
+                            var entrant = JsonSerializer.Deserialize(ref reader, typeof(Entrant), jsonSettings);
+                            if (entrant is null) throw new JsonException();
+                            entrants.Add((Entrant)entrant);
+                            while (reader.TokenType != JsonTokenType.StartObject && reader.TokenType != JsonTokenType.EndArray)
+                            {
+                                reader.Read();
+                            }
+                        }
                     }
                     else if (reader.GetString() == "data")
                     {
@@ -114,11 +147,73 @@ public class MyFormatConverter : JsonConverter<Tournament>
         }
 
         var tour = new Tournament();
+
         foreach (var key in data.Keys)
         {
             tour.ModifyData(key, data[key]);
         }
+
+        foreach (var entrant in entrants)
+        {
+            tour.AddEntrant(entrant);
+            if (entrant is TeamEntrant entrant1)
+            {
+                foreach (IndividualEntrant iE in entrant1.IndividualEntrants)
+                {
+                    if (!tour.Entrants.TryGetValue(iE.EntrantId, out _))
+                    {
+                        tour.AddEntrant(iE);
+                    }
+                }
+            }
+        }
+
+        // Everything is read, now it's time to go through the set links reconstruction process
+        // First, let's generate all the Set objects with the correct Ids, then we just put in all the relevant information,
+        Dictionary<int, Set> sets = new();
+        foreach (var setReport in setsToLink)
+        {
+            sets.Add(setReport.SetId, new Set(setReport.SetId));
+        }
+        // We can do this now, as we can change the Ids into the object references (which we know now exist)
+        foreach (var setReport in setsToLink)
+        {
+            if (!sets.TryGetValue(setReport.SetId, out Set? set)) { throw new NullReferenceException(); }
+            FillSetFromReport(set!, sets, tour.Entrants, setReport);
+        }
+        foreach (Set set in sets.Values)
+        {
+            tour.AddSet(set);
+        }
+
         return tour;
+    }
+
+    private void FillSetFromReport(Set set, Dictionary<int, Set> sets, IReadOnlyDictionary<int, Entrant> entrants, SetLinksReport report)
+    {
+        set.SetName = report.SetName;
+        set.Entrant1 = report.Entrant1Id is null ? null : entrants[(int)report.Entrant1Id];
+        set.Entrant2 = report.Entrant2Id is null ? null : entrants[(int)report.Entrant2Id];
+        set.Status = report.Status;
+        set.SetWinnerGoesTo = report.WinnerGoesToId is null ? null : sets[(int)report.WinnerGoesToId];
+        set.SetLoserGoesTo = report.LoserGoesToId is null ? null : sets[(int)report.LoserGoesToId];
+        set.Winner = report.Winner is null ? null : entrants[(int)report.Winner];
+        set.Loser = report.Loser is null ? null : entrants[(int)report.Loser];
+        set.SetDecider = report.WinnerDecider;
+        set.Data = report.Data ?? new Dictionary<string, string>();
+        // Create all relevant games
+        foreach (GameLinksReport gr in report.Games!)
+        {
+            List<Entrant> reducedSearch = [set.Entrant1, set.Entrant2];
+            Entrant e1 = reducedSearch.First(x => x.EntrantId == gr.Entrant1Id);
+            Entrant e2 = reducedSearch.First(x => x.EntrantId == gr.Entrant2Id);
+            Game game = new Game(set, gr.GameNumber, e1, e2, gr.Data);
+            Entrant? winner = reducedSearch.FirstOrDefault(x => x.EntrantId == gr.GameWinnerId);
+            if (winner is not null) game.SetWinner(winner);
+            if (gr.Status is null) { throw new JsonException(); }
+            game.SetStatus((Game.GameStatus)gr.Status);
+            set.Games.Add(game);
+        }
     }
 
     public override void Write(Utf8JsonWriter writer, Tournament value, JsonSerializerOptions options)
@@ -131,22 +226,48 @@ public class MyFormatConverter : JsonConverter<Tournament>
                 new GameConverter(),
                 new JsonStringEnumConverter<Set.SetStatus>(),
                 new JsonStringEnumConverter<Game.GameStatus>(),
-                new SetWinnerDeciderConverter()
+                new SetWinnerDeciderConverter(),
+                new EntrantConverter()
             },
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true
         };
 
         writer.WriteStartObject();
+
         // Prevent serializing into dict-like, but just two lists of objects
         var sets = value.Sets.Values;
-        var entrants = value.Entrants.Values;
         writer.WritePropertyName("sets");
         JsonSerializer.Serialize(writer, sets, jsonSettings);
+
+        var entrants = value.Entrants.Values;
+        Dictionary<int, Entrant> topLevelEntrants = new();
+        // We want to have nesting so as to not have id-based writing in the entrants
+        // this means removing any entrants that are part of a team
+        // First we put all entrants in a dict by their ID
+        foreach (Entrant entrant in entrants)
+        {
+            topLevelEntrants.Add(entrant.EntrantId, entrant);
+        }
+        // We go over all the teamEntrants, and remove all their individual entrants from the Dict
+        foreach (Entrant entrant in entrants)
+        {
+            if (entrant is TeamEntrant)
+            {
+                foreach (Entrant lowerLevelEntrant in ((TeamEntrant)entrant).IndividualEntrants)
+                {
+                    topLevelEntrants.Remove(lowerLevelEntrant.EntrantId);
+                }
+            }
+        }
+        // Now, this gives all entrants still left in the dict are top-level entrants.
+        entrants = topLevelEntrants.Values;
         writer.WritePropertyName("entrants");
         JsonSerializer.Serialize(writer, entrants, jsonSettings);
+
         writer.WritePropertyName("data");
         JsonSerializer.Serialize(writer, value.Data, jsonSettings);
+
         writer.WriteEndObject();
     }
 }
@@ -430,5 +551,182 @@ public class GameConverter : JsonConverter<Game>
             }
         }
         writer.WriteEndObject();
+    }
+}
+
+public class EntrantConverter : JsonConverter<Entrant>
+{
+    public override Entrant? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var properties = JsonSerializer.Deserialize<Dictionary<string, object?>>(ref reader, options);
+        if (properties is null) { return null; }
+        if (properties.TryGetValue("type", out object? typeValue))
+        {
+            if (typeValue is null) { throw new JsonException(); }
+            bool isAString = false;
+            string? val = "";
+            try
+            {
+                val = ((JsonElement)typeValue).GetString();
+                isAString = true;
+            }
+            catch { }
+            if (isAString && val is not null)
+            {
+                var type = Assembly.GetExecutingAssembly().GetTypes().First(type => type.Name == val);
+                if (!properties.TryGetValue("entrantId", out object? idObj) || idObj is null) { throw new JsonException(); }
+                int id = ((JsonElement)idObj).GetInt32();
+                Dictionary<string, string> data = new();
+                if (properties.TryGetValue("entrantData", out object? dataObj) && dataObj is not null)
+                {
+                    data = JsonParseHelper.ParseJsonElementIntoDict((JsonElement)dataObj);
+                }
+                if (type == typeof(IndividualEntrant))
+                {
+                    properties.TryGetValue("individualName", out object? indNameObj);
+                    if (indNameObj is null) throw new JsonException();
+
+                    var nameDict = JsonParseHelper.ParseJsonElementIntoDict((JsonElement)indNameObj);
+                    if (nameDict.TryGetValue("tag", out string? tag) && tag is not null)
+                    {
+                        return new IndividualEntrant(id, tag, data);
+                    }
+                    else if (nameDict.TryGetValue("firstName", out string? firstName) && nameDict.TryGetValue("lastName", out string? lastName))
+                    {
+                        if (firstName is null || lastName is null) { throw new JsonException(); }
+                        return new IndividualEntrant(id, firstName, lastName, data);
+                    }
+                }
+                else if (type == typeof(TeamEntrant))
+                {
+                    properties.TryGetValue("teamName", out object? teamNameObj);
+                    if (teamNameObj is null) throw new JsonException();
+                    string teamName = ((JsonElement)teamNameObj).GetString() ?? throw new JsonException();
+
+                    properties.TryGetValue("individualEntrants", out object? individualEntrantsObjects);
+                    if (individualEntrantsObjects is null) throw new JsonException();
+                    List<IndividualEntrant> individualEntrants = new();
+                    foreach (var obj in ((JsonElement)individualEntrantsObjects).EnumerateArray())
+                    {
+                        individualEntrants.Add(ReadIndividualEntrant(obj));
+                    }
+                    return new TeamEntrant(id, teamName, individualEntrants);
+                }
+                else { throw new JsonException(); }
+            }
+        }
+        return null;
+    }
+
+    private IndividualEntrant ReadIndividualEntrant(JsonElement jE)
+    {
+        Dictionary<string, JsonElement> properties = new();
+        foreach (var val in jE.EnumerateObject())
+        {
+            properties.Add(val.Name, val.Value);
+        }
+        if (!properties.TryGetValue("entrantId", out JsonElement idObj)) { throw new JsonException(); }
+        int id = idObj.GetInt32();
+        Dictionary<string, string> data = new();
+        if (properties.TryGetValue("entrantData", out JsonElement dataObj))
+        {
+            data = JsonParseHelper.ParseJsonElementIntoDict(dataObj);
+        }
+        if (!properties.TryGetValue("individualName", out JsonElement indNameObj)) { throw new JsonException(); }
+
+        var nameDict = JsonParseHelper.ParseJsonElementIntoDict(indNameObj);
+        if (nameDict.TryGetValue("tag", out string? tag) && tag is not null)
+        {
+            return new IndividualEntrant(id, tag, data);
+        }
+        else if (nameDict.TryGetValue("firstName", out string? firstName) && nameDict.TryGetValue("lastName", out string? lastName))
+        {
+            if (firstName is null || lastName is null) { throw new JsonException(); }
+            return new IndividualEntrant(id, firstName, lastName, data);
+        }
+        throw new JsonException();
+    }
+
+    public override void Write(Utf8JsonWriter writer, Entrant value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        switch (value)
+        {
+            case IndividualEntrant _:
+                writer.WriteString("type", "IndividualEntrant");
+                break;
+            case TeamEntrant _:
+                writer.WriteString("type", "TeamEntrant");
+                break;
+        }
+        // Placing Id as first element, so it is serialized first
+        var properties = value.GetType().GetProperties();
+        var id = properties.Where(x => x.Name == "EntrantId");
+        var rest = properties.Where(x => x.Name != "EntrantId");
+        var sortedProperties = id.Concat(rest);
+        foreach (var property in sortedProperties)
+        {
+            if (property.Name.Contains("Name"))
+            {
+                switch (value)
+                {
+                    case IndividualEntrant ie:
+                        writer.WritePropertyName("individualName");
+                        switch (ie.EntrantName)
+                        {
+                            case IndividualEntrant.Tag tag:
+                                writer.WriteStartObject();
+                                writer.WriteString("tag", tag._tag);
+                                writer.WriteEndObject();
+                                break;
+                            case IndividualEntrant.FullName fn:
+                                writer.WriteStartObject();
+                                writer.WriteString("firstName", fn._firstName);
+                                writer.WriteString("lastName", fn._lastName);
+                                writer.WriteEndObject();
+                                break;
+                        }
+                        break;
+                    case TeamEntrant te:
+                        writer.WriteString("teamName", te.TeamName);
+                        break;
+                }
+            }
+            else if (property.Name.Contains("IndividualEntrants"))
+            {
+                writer.WritePropertyName(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
+                var propertyValue = property.GetValue(value);
+                if (propertyValue is null) { throw new JsonException(); }
+                var listOfIndividuals = (List<IndividualEntrant>)propertyValue;
+                EntrantConverter ec = new();
+                writer.WriteStartArray();
+                foreach (Entrant entrant in listOfIndividuals)
+                {
+                    ec.Write(writer, entrant, options);
+                }
+                writer.WriteEndArray();
+            }
+            else
+            {
+                writer.WritePropertyName(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
+                var propertyValue = property.GetValue(value);
+                JsonSerializer.Serialize(writer, propertyValue, propertyValue?.GetType() ?? typeof(object), options);
+            }
+        }
+        writer.WriteEndObject();
+    }
+}
+
+internal static class JsonParseHelper
+{
+    internal static Dictionary<string, string> ParseJsonElementIntoDict(JsonElement jE)
+    {
+        var dict = new Dictionary<string, string>();
+        var jsonObj = jE.EnumerateObject();
+        foreach (JsonProperty property in jsonObj)
+        {
+            dict[property.Name] = property.Value.GetString() ?? throw new JsonException();
+        }
+        return dict;
     }
 }
