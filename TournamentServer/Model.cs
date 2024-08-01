@@ -107,7 +107,6 @@ public class Set
 {
     private static List<Set> _sets = new List<Set>();
 
-    // Id here is a string, as there may be requests to use IDs that are more readable e.g. SF1, QF3
     private int _setId;
     private string? _setName;
     private Entrant? _entrant1;
