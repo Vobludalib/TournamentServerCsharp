@@ -75,6 +75,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
             Converters = {
                 new SetConverter(),
                 new GameConverter(),
+                new JsonStringEnumConverter<Tournament.TournamentStatus>(),
                 new JsonStringEnumConverter<Set.SetStatus>(),
                 new JsonStringEnumConverter<Set.Game.GameStatus>(),
                 new SetWinnerDeciderConverter(),
@@ -89,18 +90,12 @@ public class MyFormatConverter : JsonConverter<Tournament>
         List<SetLinksReport> setsToLink = new List<SetLinksReport>();
         List<Entrant> entrants = new();
         Dictionary<string, string> data = new();
+        Tournament.TournamentStatus status = Tournament.TournamentStatus.Setup;
         while (reader.Read())
         {
             switch (reader.TokenType)
             {
-                case JsonTokenType.StartObject:
-                    Console.WriteLine("Start of object");
-                    break;
-                case JsonTokenType.EndObject:
-                    Console.WriteLine("End of object");
-                    break;
                 case JsonTokenType.PropertyName:
-                    Console.WriteLine($"Property: {reader.GetString()}");
                     if (reader.GetString() == "sets")
                     {
                         SetConverter sc = new();
@@ -139,6 +134,10 @@ public class MyFormatConverter : JsonConverter<Tournament>
                         if (readData is null) { throw new JsonException(); }
                         data = readData;
                     }
+                    else if (reader.GetString() == "status")
+                    {
+                        status = (Tournament.TournamentStatus)(JsonSerializer.Deserialize(ref reader, typeof(Tournament.TournamentStatus), options) ?? Tournament.TournamentStatus.Setup);
+                    }
                     break;
             }
         }
@@ -147,7 +146,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
 
         foreach (var key in data.Keys)
         {
-            tour.ModifyData(key, data[key]);
+            tour.AddOrEditData(key, data[key]);
         }
 
         foreach (var entrant in entrants)
@@ -183,6 +182,12 @@ public class MyFormatConverter : JsonConverter<Tournament>
             tour.AddSet(set);
         }
 
+        tour.SetStatus(status);
+        if (tour.Status != Tournament.TournamentStatus.Setup)
+        {
+            if (!tour.VerifyStructure()) { throw new JsonException("Tournament structure of JSON being loaded is not valid."); }
+        }
+
         return tour;
     }
 
@@ -194,6 +199,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
             Converters = {
                 new SetConverter(),
                 new GameConverter(),
+                new JsonStringEnumConverter<Tournament.TournamentStatus>(),
                 new JsonStringEnumConverter<Set.SetStatus>(),
                 new JsonStringEnumConverter<Set.Game.GameStatus>(),
                 new SetWinnerDeciderConverter(),
@@ -238,6 +244,8 @@ public class MyFormatConverter : JsonConverter<Tournament>
         writer.WritePropertyName("data");
         JsonSerializer.Serialize(writer, value.Data, jsonSettings);
 
+        writer.WritePropertyName("status");
+        JsonSerializer.Serialize(writer, value.Status, jsonSettings);
         writer.WriteEndObject();
     }
 }

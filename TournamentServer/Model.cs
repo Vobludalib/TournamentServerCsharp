@@ -1,6 +1,8 @@
 ///Countable
 
 using System.Diagnostics.CodeAnalysis;
+using System.Formats.Asn1;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 namespace TournamentSystem;
@@ -21,23 +23,178 @@ public class Tournament
     private object _setLocker;
     private object _entrantsLocker;
     private object _dataLocker;
+    private TournamentStatus _status;
+    public enum TournamentStatus { Setup, InProgress, Finished }
 
     public IReadOnlyDictionary<int, Set> Sets => _sets;
     public IReadOnlyDictionary<int, Entrant> Entrants => _entrants;
     public IReadOnlyDictionary<string, string> Data => _data;
+    public TournamentStatus Status => _status;
 
     public Tournament()
     {
         _sets = new Dictionary<int, Set>();
         _entrants = new Dictionary<int, Entrant>();
         _data = new Dictionary<string, string>();
+        _status = TournamentStatus.Setup;
         _setLocker = new();
         _entrantsLocker = new();
         _dataLocker = new();
     }
 
+    /// <summary>
+    /// This method is used for finalizing the setup of a tournament. Returns true on success, otherwise false.
+    /// Part of this method is verifying the structure of the tournament is valid.
+    /// </summary>
+    /// <returns></returns>
+    public bool TryMoveToInProgress()
+    {
+        if (_status != TournamentStatus.Setup) return false;
+        if (VerifyStructure())
+        {
+            _status = TournamentStatus.InProgress;
+            return true;
+        }
+        return false;
+    }
+
+    public bool TryMoveToFinished()
+    {
+        if (_status != TournamentStatus.InProgress) return false;
+        _status = TournamentStatus.Finished;
+        return true;
+    }
+
+    /// <summary>
+    /// Method used only for JSON conversion - hard override of the tournament status
+    /// </summary>
+    /// <param name="status"></param>
+    internal void SetStatus(TournamentStatus status)
+    {
+        _status = status;
+    }
+
+    internal bool VerifyStructure()
+    {
+        // Acquire locks of every set, along with locking sets and entrants dictionaries
+        try
+        {
+            Monitor.Enter(_setLocker);
+            Monitor.Enter(_entrantsLocker);
+            var allSets = _sets.Values.ToList();
+            // Sorting by setId to guarantee consistent locking order
+            allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
+            foreach (Set set in allSets)
+            {
+                Monitor.Enter(set.GetLocker());
+            }
+
+            // Verify each set has correct amount of entrants incoming/already in the set
+            if (!VerifyAmountOfEntrants()) return false;
+            // Verify no cycles
+            if (!VerifyNoCycles()) return false;
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            Monitor.Exit(_setLocker);
+            Monitor.Exit(_entrantsLocker);
+            var allSets = _sets.Values.ToList();
+            allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
+            foreach (Set set in allSets)
+            {
+                Monitor.Exit(set.GetLocker());
+            }
+        }
+    }
+
+    private bool VerifyAmountOfEntrants()
+    {
+        Dictionary<Set, int> amountOfEntrants = new();
+        foreach (Set set in _sets.Values)
+        {
+            if (set.Entrant1 is not null) amountOfEntrants[set] = amountOfEntrants.GetValueOrDefault(set, 0) + 1;
+            if (set.Entrant2 is not null) amountOfEntrants[set] = amountOfEntrants.GetValueOrDefault(set, 0) + 1;
+            if (set.SetWinnerGoesTo is not null) amountOfEntrants[set.SetWinnerGoesTo] = amountOfEntrants.GetValueOrDefault(set.SetWinnerGoesTo, 0) + 1;
+            if (set.SetLoserGoesTo is not null) amountOfEntrants[set.SetLoserGoesTo] = amountOfEntrants.GetValueOrDefault(set.SetLoserGoesTo, 0) + 1;
+        }
+        foreach (int amount in amountOfEntrants.Values)
+        {
+            if (amount != 2) return false;
+        }
+        return true;
+    }
+
+    private bool VerifyNoCycles()
+    {
+        Dictionary<int, List<int>> adjacents = new();
+        foreach (Set set in _sets.Values)
+        {
+            if (set.SetWinnerGoesTo is not null) { adjacents[set.SetId].Add(set.SetWinnerGoesTo.SetId); }
+            if (set.SetLoserGoesTo is not null) { adjacents[set.SetId].Add(set.SetLoserGoesTo.SetId); }
+        }
+
+        // Use DFS to check for cycles
+        Stack<int> stack = new();
+        HashSet<int> currPath = new();
+        HashSet<int> visited = new();
+        foreach (var node in adjacents.Keys)
+        {
+            if (!visited.Contains(node))
+            {
+                stack.Push(node);
+
+                while (stack.Count > 0)
+                {
+                    int current = stack.Peek();
+
+                    if (!visited.Contains(current))
+                    {
+                        visited.Add(current);
+                        currPath.Add(current);
+                    }
+
+                    bool foundUnvisitedNeighbor = false;
+
+                    foreach (var neighbor in adjacents[current])
+                    {
+                        if (!visited.Contains(neighbor))
+                        {
+                            stack.Push(neighbor);
+                            foundUnvisitedNeighbor = true;
+                            break;
+                        }
+                        else if (currPath.Contains(neighbor))
+                        {
+                            // A cycle is detected
+                            return false;
+                        }
+                    }
+
+                    if (!foundUnvisitedNeighbor)
+                    {
+                        int nodeOutOfRecStack = stack.Pop();
+                        currPath.Remove(nodeOutOfRecStack);
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Method for adding a Set to the tournament.
+    /// </summary>
+    /// <param name="set"></param>
+    /// <returns></returns>
     public bool AddSet(Set set)
     {
+        if (_status != TournamentStatus.Setup) return false;
         lock (_setLocker)
         {
             try
@@ -52,8 +209,27 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method for removing sets for the tournament (by id). Returns true on success, otherwise false
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    public bool TryRemoveSet(int id)
+    {
+        if (_status != TournamentStatus.Setup) return false;
+        lock (_setLocker)
+        {
+            if (_sets.ContainsKey(id))
+            {
+                _sets.Remove(id); return true;
+            }
+            return false;
+        }
+    }
+
     public bool AddEntrant(Entrant entrant)
     {
+        if (_status != TournamentStatus.Setup) return false;
         lock (_entrantsLocker)
         {
             try
@@ -68,8 +244,34 @@ public class Tournament
         }
     }
 
-    public bool ModifyData(string label, string value)
+    /// <summary>
+    /// Method for removing entrants for the tournament (by id). Returns true on success, otherwise false
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns></returns>
+    public bool TryRemoveEntrant(int id)
     {
+        if (_status != TournamentStatus.Setup) return false;
+        lock (_entrantsLocker)
+        {
+            if (_entrants.ContainsKey(id))
+            {
+                _entrants.Remove(id); return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Method for adding or editing a specific key value pair of Data. If the key does not yet exist, it is added, otherwise the existing value is just overwritten.
+    /// Returns true on a success, otherwise false.
+    /// </summary>
+    /// <param name="label"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    public bool AddOrEditData(string label, string value)
+    {
+        if (_status == TournamentStatus.Finished) return false;
         lock (_dataLocker)
         {
             try
@@ -88,8 +290,14 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method for deleting from data. Return true on success, otherwise false.
+    /// </summary>
+    /// <param name="label"></param>
+    /// <returns></returns>
     public bool DeleteData(string label)
     {
+        if (_status == TournamentStatus.Finished) return false;
         lock (_dataLocker)
         {
             if (_data.ContainsKey(label))
@@ -310,8 +518,8 @@ public class Set
             foreach (Game game in games)
             {
                 if (game.GameWinner is null) continue;
-                if (game.GameWinner.EntrantId == entrant1.EntrantId) entrant1Wins += 1;
-                if (game.GameWinner.EntrantId == entrant2.EntrantId) entrant2Wins += 1;
+                else if (game.GameWinner.EntrantId == entrant1.EntrantId) entrant1Wins += 1;
+                else if (game.GameWinner.EntrantId == entrant2.EntrantId) entrant2Wins += 1;
                 else { throw new InvalidOperationException($"Winner of game {game.GameNumber} is neither of the passed entrants."); }
             }
 
@@ -459,8 +667,8 @@ public class Set
             {
                 lock (_setWinnerGoesTo._locker)
                 {
-                    if (_setWinnerGoesTo._entrant1 is not null) _setWinnerGoesTo._entrant1 = _winner;
-                    else if (_setWinnerGoesTo._entrant2 is not null) _setWinnerGoesTo._entrant2 = _winner;
+                    if (_setWinnerGoesTo._entrant1 is null) _setWinnerGoesTo._entrant1 = _winner;
+                    else if (_setWinnerGoesTo._entrant2 is null) _setWinnerGoesTo._entrant2 = _winner;
                     else if (_setWinnerGoesTo._entrant1 != _winner && _setWinnerGoesTo._entrant2 != _winner)
                     {
                         throw new InvalidOperationException("Moving an entrant to an already filled set");
@@ -482,6 +690,10 @@ public class Set
             return true;
         }
     }
+
+    // Only to be used for specific segments of code - you should not be locking it this way unless you have
+    // a very good reason
+    internal object GetLocker() => _locker;
 
     public class Game
     {
