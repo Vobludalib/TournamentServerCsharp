@@ -5,6 +5,7 @@ using System.Formats.Asn1;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
 namespace TournamentSystem;
 
 /**
@@ -24,7 +25,13 @@ public class Tournament
     private object _entrantsLocker;
     private object _dataLocker;
     private TournamentStatus _status;
-    public enum TournamentStatus { Setup, InProgress, Finished }
+
+    public enum TournamentStatus
+    {
+        Setup,
+        InProgress,
+        Finished
+    }
 
     public IReadOnlyDictionary<int, Set> Sets => _sets;
     public IReadOnlyDictionary<int, Entrant> Entrants => _entrants;
@@ -49,7 +56,8 @@ public class Tournament
     /// <returns></returns>
     public bool TryMoveToInProgress()
     {
-        if (_status != TournamentStatus.Setup) return false;
+        if (_status != TournamentStatus.Setup)
+            return false;
         if (VerifyStructure())
         {
             _status = TournamentStatus.InProgress;
@@ -60,7 +68,8 @@ public class Tournament
 
     public bool TryMoveToFinished()
     {
-        if (_status != TournamentStatus.InProgress) return false;
+        if (_status != TournamentStatus.InProgress)
+            return false;
         _status = TournamentStatus.Finished;
         return true;
     }
@@ -90,9 +99,11 @@ public class Tournament
             }
 
             // Verify each set has correct amount of entrants incoming/already in the set
-            if (!VerifyAmountOfEntrants()) return false;
+            if (!VerifyAmountOfEntrants())
+                return false;
             // Verify no cycles
-            if (!VerifyNoCycles()) return false;
+            if (!VerifyNoCycles())
+                return false;
 
             return true;
         }
@@ -118,14 +129,21 @@ public class Tournament
         Dictionary<Set, int> amountOfEntrants = new();
         foreach (Set set in _sets.Values)
         {
-            if (set.Entrant1 is not null) amountOfEntrants[set] = amountOfEntrants.GetValueOrDefault(set, 0) + 1;
-            if (set.Entrant2 is not null) amountOfEntrants[set] = amountOfEntrants.GetValueOrDefault(set, 0) + 1;
-            if (set.SetWinnerGoesTo is not null) amountOfEntrants[set.SetWinnerGoesTo] = amountOfEntrants.GetValueOrDefault(set.SetWinnerGoesTo, 0) + 1;
-            if (set.SetLoserGoesTo is not null) amountOfEntrants[set.SetLoserGoesTo] = amountOfEntrants.GetValueOrDefault(set.SetLoserGoesTo, 0) + 1;
+            if (set.Entrant1 is not null)
+                amountOfEntrants[set] = amountOfEntrants.GetValueOrDefault(set, 0) + 1;
+            if (set.Entrant2 is not null)
+                amountOfEntrants[set] = amountOfEntrants.GetValueOrDefault(set, 0) + 1;
+            if (set.SetWinnerGoesTo is not null)
+                amountOfEntrants[set.SetWinnerGoesTo] =
+                    amountOfEntrants.GetValueOrDefault(set.SetWinnerGoesTo, 0) + 1;
+            if (set.SetLoserGoesTo is not null)
+                amountOfEntrants[set.SetLoserGoesTo] =
+                    amountOfEntrants.GetValueOrDefault(set.SetLoserGoesTo, 0) + 1;
         }
         foreach (int amount in amountOfEntrants.Values)
         {
-            if (amount != 2) return false;
+            if (amount != 2)
+                return false;
         }
         return true;
     }
@@ -139,8 +157,14 @@ public class Tournament
         }
         foreach (Set set in _sets.Values)
         {
-            if (set.SetWinnerGoesTo is not null) { adjacents[set.SetId].Add(set.SetWinnerGoesTo.SetId); }
-            if (set.SetLoserGoesTo is not null) { adjacents[set.SetId].Add(set.SetLoserGoesTo.SetId); }
+            if (set.SetWinnerGoesTo is not null)
+            {
+                adjacents[set.SetId].Add(set.SetWinnerGoesTo.SetId);
+            }
+            if (set.SetLoserGoesTo is not null)
+            {
+                adjacents[set.SetId].Add(set.SetLoserGoesTo.SetId);
+            }
         }
 
         // Use DFS to check for cycles
@@ -198,7 +222,8 @@ public class Tournament
     /// <returns></returns>
     public bool AddSet(Set set)
     {
-        if (_status != TournamentStatus.Setup) return false;
+        if (_status != TournamentStatus.Setup)
+            return false;
         lock (_setLocker)
         {
             try
@@ -220,12 +245,14 @@ public class Tournament
     /// <returns></returns>
     public bool TryRemoveSet(int id)
     {
-        if (_status != TournamentStatus.Setup) return false;
+        if (_status != TournamentStatus.Setup)
+            return false;
         lock (_setLocker)
         {
             if (_sets.ContainsKey(id))
             {
-                _sets.Remove(id); return true;
+                _sets.Remove(id);
+                return true;
             }
             return false;
         }
@@ -233,7 +260,8 @@ public class Tournament
 
     public bool AddEntrant(Entrant entrant)
     {
-        if (_status != TournamentStatus.Setup) return false;
+        if (_status != TournamentStatus.Setup)
+            return false;
         lock (_entrantsLocker)
         {
             try
@@ -255,12 +283,14 @@ public class Tournament
     /// <returns></returns>
     public bool TryRemoveEntrant(int id)
     {
-        if (_status != TournamentStatus.Setup) return false;
+        if (_status != TournamentStatus.Setup)
+            return false;
         lock (_entrantsLocker)
         {
             if (_entrants.ContainsKey(id))
             {
-                _entrants.Remove(id); return true;
+                _entrants.Remove(id);
+                return true;
             }
             return false;
         }
@@ -275,12 +305,14 @@ public class Tournament
     /// <returns></returns>
     public bool AddOrEditData(string label, string value)
     {
-        if (_status == TournamentStatus.Finished) return false;
+        if (_status == TournamentStatus.Finished)
+            return false;
         lock (_dataLocker)
         {
             try
             {
-                if (_data.ContainsKey(label)) _data[label] = value;
+                if (_data.ContainsKey(label))
+                    _data[label] = value;
                 else
                 {
                     _data.Add(label, value);
@@ -301,12 +333,14 @@ public class Tournament
     /// <returns></returns>
     public bool DeleteData(string label)
     {
-        if (_status == TournamentStatus.Finished) return false;
+        if (_status == TournamentStatus.Finished)
+            return false;
         lock (_dataLocker)
         {
             if (_data.ContainsKey(label))
             {
-                _data.Remove(label); return true;
+                _data.Remove(label);
+                return true;
             }
             else
             {
@@ -378,7 +412,8 @@ public class Set
         {
             lock (_locker)
             {
-                if (_status != SetStatus.IncompleteSetup) throw new InvalidOperationException("Cannot change entrants after set setup.");
+                if (_status != SetStatus.IncompleteSetup)
+                    throw new InvalidOperationException("Cannot change entrants after set setup.");
                 _entrant2 = value;
             }
         }
@@ -399,7 +434,9 @@ public class Set
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
-                    throw new InvalidOperationException("Cannot change where winner goes after set setup.");
+                    throw new InvalidOperationException(
+                        "Cannot change where winner goes after set setup."
+                    );
                 }
                 _setWinnerGoesTo = value;
             }
@@ -415,7 +452,9 @@ public class Set
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
-                    throw new InvalidOperationException("Cannot change where loser goes after set setup.");
+                    throw new InvalidOperationException(
+                        "Cannot change where loser goes after set setup."
+                    );
                 }
                 _setLoserGoesTo = value;
             }
@@ -446,7 +485,9 @@ public class Set
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
-                    throw new InvalidOperationException("Cannot change winner decider  after set setup.");
+                    throw new InvalidOperationException(
+                        "Cannot change winner decider  after set setup."
+                    );
                 }
                 _setDecider = value;
             }
@@ -465,7 +506,13 @@ public class Set
         }
     }
 
-    public enum SetStatus { IncompleteSetup, WaitingForStart, InProgress, Finished }
+    public enum SetStatus
+    {
+        IncompleteSetup,
+        WaitingForStart,
+        InProgress,
+        Finished
+    }
 
     // I only have a constructor with only ID, as the fields will be set later. This is because
     // of the order in which a tournament must be reconstructed from JSON, but also
@@ -473,12 +520,15 @@ public class Set
     // hand should not change once it is created, as it is immutable.
     public Set(int id)
     {
-        if (_sets is null) _sets = new List<Set>();
+        if (_sets is null)
+            _sets = new List<Set>();
         foreach (var set in _sets)
         {
             if (set._setId == id)
             {
-                throw new InvalidOperationException("Attempting to create a set with an already existing Id");
+                throw new InvalidOperationException(
+                    "Attempting to create a set with an already existing Id"
+                );
             }
         }
 
@@ -494,7 +544,7 @@ public class Set
 
     /// <summary>
     /// IWinnerDecider is an interface used for specifying custom set-winner conditions.
-    /// 
+    ///
     /// E.g. tennis will have a WinnerDecider that works with the win-by-two condition, while most sports
     /// just have a first to X wins condition.
     /// </summary>
@@ -521,10 +571,18 @@ public class Set
             int entrant2Wins = 0;
             foreach (Game game in games)
             {
-                if (game.GameWinner is null) continue;
-                else if (game.GameWinner.EntrantId == entrant1.EntrantId) entrant1Wins += 1;
-                else if (game.GameWinner.EntrantId == entrant2.EntrantId) entrant2Wins += 1;
-                else { throw new InvalidOperationException($"Winner of game {game.GameNumber} is neither of the passed entrants."); }
+                if (game.GameWinner is null)
+                    continue;
+                else if (game.GameWinner.EntrantId == entrant1.EntrantId)
+                    entrant1Wins += 1;
+                else if (game.GameWinner.EntrantId == entrant2.EntrantId)
+                    entrant2Wins += 1;
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Winner of game {game.GameNumber} is neither of the passed entrants."
+                    );
+                }
             }
 
             if (entrant1Wins < AmountOfWinsRequired && entrant2Wins < AmountOfWinsRequired)
@@ -541,7 +599,9 @@ public class Set
             }
             else if (entrant1Wins >= AmountOfWinsRequired && entrant2Wins >= AmountOfWinsRequired)
             {
-                throw new InvalidOperationException("Both players have more than enough wins to proceed. Invalid state");
+                throw new InvalidOperationException(
+                    "Both players have more than enough wins to proceed. Invalid state"
+                );
             }
 
             throw new NotImplementedException("Other alternative states not handled currently");
@@ -556,16 +616,27 @@ public class Set
     /// <param name="entrants"></param>
     /// <param name="report"></param>
     /// <exception cref="JsonException"></exception>
-    internal void FillSetFromReport(Dictionary<int, Set> sets, IReadOnlyDictionary<int, Entrant> entrants, MyFormatConverter.SetLinksReport report)
+    internal void FillSetFromReport(
+        Dictionary<int, Set> sets,
+        IReadOnlyDictionary<int, Entrant> entrants,
+        MyFormatConverter.SetLinksReport report
+    )
     {
         _setName = report.SetName;
         _entrant1 = report.Entrant1Id is null ? null : entrants[(int)report.Entrant1Id];
         _entrant2 = report.Entrant2Id is null ? null : entrants[(int)report.Entrant2Id];
         _status = report.Status;
-        if (((_status == SetStatus.Finished) && (_entrant1 is null || _entrant2 is null || _winner is null || _loser is null)) || ((_status == SetStatus.InProgress) && (_entrant1 is null || _entrant2 is null)))
+        if (
+            (
+                (_status == SetStatus.Finished)
+                && (_entrant1 is null || _entrant2 is null || _winner is null || _loser is null)
+            ) || ((_status == SetStatus.InProgress) && (_entrant1 is null || _entrant2 is null))
+        )
         {
             // Essentially if we read Finished or InProgress without the correct prerequisites to be in that state, then the JSON is invalid
-            throw new JsonException("Loading a Finished or InProgress set that does not have the necessary prerequisites to be in that state.");
+            throw new JsonException(
+                "Loading a Finished or InProgress set that does not have the necessary prerequisites to be in that state."
+            );
         }
         _setWinnerGoesTo = report.WinnerGoesToId is null ? null : sets[(int)report.WinnerGoesToId];
         _setLoserGoesTo = report.LoserGoesToId is null ? null : sets[(int)report.LoserGoesToId];
@@ -581,8 +652,12 @@ public class Set
             Entrant e2 = reducedSearch.First(x => x.EntrantId == gr.Entrant2Id);
             Game game = new Game(this, gr.GameNumber, e1, e2, gr.Data);
             Entrant? winner = reducedSearch.FirstOrDefault(x => x.EntrantId == gr.GameWinnerId);
-            if (winner is not null) game.SetWinner(winner);
-            if (gr.Status is null) { throw new JsonException(); }
+            if (winner is not null)
+                game.SetWinner(winner);
+            if (gr.Status is null)
+            {
+                throw new JsonException();
+            }
             game.SetStatus((Game.GameStatus)gr.Status);
             _games.Add(game);
         }
@@ -603,11 +678,18 @@ public class Set
                 // If the game is not currently in progress, we should not even look at the games
                 return false;
             }
-            if (_setDecider is null) { throw new NullReferenceException("Set is InProgress without a SetDecider set."); }
-            if (_entrant1 is null || _entrant2 is null) { throw new NullReferenceException("Set is InProgress without both entrants set."); }
+            if (_setDecider is null)
+            {
+                throw new NullReferenceException("Set is InProgress without a SetDecider set.");
+            }
+            if (_entrant1 is null || _entrant2 is null)
+            {
+                throw new NullReferenceException("Set is InProgress without both entrants set.");
+            }
             Entrant? winner = _setDecider.DecideWinner(_entrant1, _entrant2, Games);
             // If no winner, we return false.
-            if (winner is null) return false;
+            if (winner is null)
+                return false;
             // Otherwise, we set the appropriate winner and loser properties
             // We do not move players to their next set in this step, that is handled elsewhere
             // there may be cases where we wish for these properties to be filled, but not do anything with them yet
@@ -615,14 +697,16 @@ public class Set
             {
                 _winner = _entrant1;
                 _loser = _entrant2;
-
             }
             else if (winner == _entrant2)
             {
                 _winner = _entrant2;
                 _loser = _entrant1;
             }
-            else { throw new NotImplementedException(); }
+            else
+            {
+                throw new NotImplementedException();
+            }
             _status = SetStatus.Finished;
             return true;
         }
@@ -636,7 +720,8 @@ public class Set
     {
         lock (_locker)
         {
-            if (_status != SetStatus.WaitingForStart) return false;
+            if (_status != SetStatus.WaitingForStart)
+                return false;
             _status = SetStatus.InProgress;
             return true;
         }
@@ -650,8 +735,10 @@ public class Set
     {
         lock (_locker)
         {
-            if (_status != SetStatus.IncompleteSetup) return false;
-            if (_entrant1 is null || _entrant2 is null || _setDecider is null) return false;
+            if (_status != SetStatus.IncompleteSetup)
+                return false;
+            if (_entrant1 is null || _entrant2 is null || _setDecider is null)
+                return false;
             _status = SetStatus.WaitingForStart;
             return true;
         }
@@ -665,17 +752,26 @@ public class Set
     {
         lock (_locker)
         {
-            if (_status != SetStatus.Finished) return false;
-            if (_winner is null || _loser is null) return false;
+            if (_status != SetStatus.Finished)
+                return false;
+            if (_winner is null || _loser is null)
+                return false;
             if (_setWinnerGoesTo is not null)
             {
                 lock (_setWinnerGoesTo._locker)
                 {
-                    if (_setWinnerGoesTo._entrant1 is null) _setWinnerGoesTo._entrant1 = _winner;
-                    else if (_setWinnerGoesTo._entrant2 is null) _setWinnerGoesTo._entrant2 = _winner;
-                    else if (_setWinnerGoesTo._entrant1 != _winner && _setWinnerGoesTo._entrant2 != _winner)
+                    if (_setWinnerGoesTo._entrant1 is null)
+                        _setWinnerGoesTo._entrant1 = _winner;
+                    else if (_setWinnerGoesTo._entrant2 is null)
+                        _setWinnerGoesTo._entrant2 = _winner;
+                    else if (
+                        _setWinnerGoesTo._entrant1 != _winner
+                        && _setWinnerGoesTo._entrant2 != _winner
+                    )
                     {
-                        throw new InvalidOperationException("Moving an entrant to an already filled set");
+                        throw new InvalidOperationException(
+                            "Moving an entrant to an already filled set"
+                        );
                     }
                 }
             }
@@ -683,11 +779,18 @@ public class Set
             {
                 lock (_setLoserGoesTo._locker)
                 {
-                    if (_setLoserGoesTo._entrant1 is not null) _setLoserGoesTo._entrant1 = _loser;
-                    else if (_setLoserGoesTo._entrant2 is not null) _setLoserGoesTo._entrant2 = _loser;
-                    else if (_setLoserGoesTo._entrant1 != _loser && _setLoserGoesTo._entrant2 != _loser)
+                    if (_setLoserGoesTo._entrant1 is not null)
+                        _setLoserGoesTo._entrant1 = _loser;
+                    else if (_setLoserGoesTo._entrant2 is not null)
+                        _setLoserGoesTo._entrant2 = _loser;
+                    else if (
+                        _setLoserGoesTo._entrant1 != _loser
+                        && _setLoserGoesTo._entrant2 != _loser
+                    )
                     {
-                        throw new InvalidOperationException("Moving an entrant to an already filled set");
+                        throw new InvalidOperationException(
+                            "Moving an entrant to an already filled set"
+                        );
                     }
                 }
             }
@@ -703,6 +806,7 @@ public class Set
     {
         public readonly Set _parentSet;
         private readonly int _gameNumber;
+
         // Stored separately to the sets teams, as for certain games Team 1 and Team 2 may have meanings
         // (e.g. side selection)
         private readonly Entrant _entrant1;
@@ -718,7 +822,12 @@ public class Set
 
         public GameStatus Status => _status;
 
-        public enum GameStatus { Waiting, InProgress, Finished }
+        public enum GameStatus
+        {
+            Waiting,
+            InProgress,
+            Finished
+        }
 
         // Dictionary for the other data, stored as a string, and will be parsed when and if necessary
         // Given that the kind of data stored here can have a variety of formats, no point trying to parse here
@@ -726,13 +835,20 @@ public class Set
         private Dictionary<string, string> _data = new();
         public Dictionary<string, string> Data => _data;
 
-        public Game(Set ParentSet, int GameNumber, Entrant Entrant1, Entrant Entrant2, Dictionary<string, string>? Data = null)
+        public Game(
+            Set ParentSet,
+            int GameNumber,
+            Entrant Entrant1,
+            Entrant Entrant2,
+            Dictionary<string, string>? Data = null
+        )
         {
             _parentSet = ParentSet;
             _gameNumber = GameNumber;
             _entrant1 = Entrant1;
             _entrant2 = Entrant2;
-            if (Data is null) _data = new Dictionary<string, string>();
+            if (Data is null)
+                _data = new Dictionary<string, string>();
             _data = Data!;
             _status = GameStatus.Waiting;
             _locker = new();
@@ -746,7 +862,11 @@ public class Set
         {
             lock (_locker)
             {
-                if (_status == GameStatus.InProgress) { _status = GameStatus.Waiting; return true; }
+                if (_status == GameStatus.InProgress)
+                {
+                    _status = GameStatus.Waiting;
+                    return true;
+                }
                 return false;
             }
         }
@@ -759,7 +879,11 @@ public class Set
         {
             lock (_locker)
             {
-                if (_status == GameStatus.Waiting) { _status = GameStatus.InProgress; return true; }
+                if (_status == GameStatus.Waiting)
+                {
+                    _status = GameStatus.InProgress;
+                    return true;
+                }
                 return false;
             }
         }
@@ -771,7 +895,8 @@ public class Set
             {
                 lock (_locker)
                 {
-                    if (winner != Entrant1 && winner != Entrant2) throw new InvalidOperationException();
+                    if (winner != Entrant1 && winner != Entrant2)
+                        throw new InvalidOperationException();
                     _gameWinner = winner;
                     _status = GameStatus.Finished;
                 }
@@ -791,10 +916,10 @@ public class Set
 
 public abstract record class Entrant
 {
-    static protected List<Entrant>? _entrants;
+    protected static List<Entrant>? _entrants;
     public int EntrantId { get; init; }
 
-    // This is a dictionary, as we don't have a set promise from the JSON as to what information 
+    // This is a dictionary, as we don't have a set promise from the JSON as to what information
     // can or can't be included, instead we just store directly from the JSON and any parsing is done
     // when required
     protected Dictionary<string, string> _entrantData = new Dictionary<string, string>();
@@ -810,6 +935,7 @@ public record class IndividualEntrant : Entrant
     public abstract class Name
     {
         public abstract string GetFullName();
+
         // For now, we do hard-coded condensed versions, see relevant method, but
         // this can be expanded to allow custom definitions of 'condensed' form in the JSON itself
         public abstract string GetCondensedName();
@@ -825,6 +951,7 @@ public record class IndividualEntrant : Entrant
         }
 
         public override string GetFullName() => _tag;
+
         public override string GetCondensedName() => _tag;
     }
 
@@ -832,12 +959,15 @@ public record class IndividualEntrant : Entrant
     {
         internal readonly string _firstName;
         internal readonly string _lastName;
+
         public FullName(string firstName, string lastName)
         {
             _firstName = firstName;
             _lastName = lastName;
         }
+
         public override string GetFullName() => _firstName + " " + _lastName;
+
         public override string GetCondensedName()
         {
             if (_firstName.Length > 0)
@@ -853,39 +983,56 @@ public record class IndividualEntrant : Entrant
 
     public IndividualEntrant(int Id, string Tag, Dictionary<string, string>? data = null)
     {
-        if (_entrants is null) _entrants = new List<Entrant>();
+        if (_entrants is null)
+            _entrants = new List<Entrant>();
         foreach (var entrant in _entrants)
         {
             if (entrant.EntrantId == Id)
             {
-                throw new InvalidOperationException("Attempting to create an entrant with an already existing Id");
+                throw new InvalidOperationException(
+                    "Attempting to create an entrant with an already existing Id"
+                );
             }
         }
 
         EntrantId = Id;
         EntrantName = new Tag(Tag);
 
-        if (data is null) { data = new Dictionary<string, string>(); }
+        if (data is null)
+        {
+            data = new Dictionary<string, string>();
+        }
         _entrantData = data;
 
         _entrants.Add(this);
     }
 
-    public IndividualEntrant(int Id, string FirstName, string LastName, Dictionary<string, string>? data = null)
+    public IndividualEntrant(
+        int Id,
+        string FirstName,
+        string LastName,
+        Dictionary<string, string>? data = null
+    )
     {
-        if (_entrants is null) _entrants = new List<Entrant>();
+        if (_entrants is null)
+            _entrants = new List<Entrant>();
         foreach (var entrant in _entrants)
         {
             if (entrant.EntrantId == Id)
             {
-                throw new InvalidOperationException("Attempting to create an entrant with an already existing Id");
+                throw new InvalidOperationException(
+                    "Attempting to create an entrant with an already existing Id"
+                );
             }
         }
 
         EntrantId = Id;
         EntrantName = new FullName(FirstName, LastName);
 
-        if (data is null) { data = new Dictionary<string, string>(); }
+        if (data is null)
+        {
+            data = new Dictionary<string, string>();
+        }
         _entrantData = data;
 
         _entrants.Add(this);
@@ -894,7 +1041,6 @@ public record class IndividualEntrant : Entrant
 
 public record class TeamEntrant : Entrant
 {
-
     public List<IndividualEntrant> IndividualEntrants { get; init; }
     public string? TeamName { get; init; }
 

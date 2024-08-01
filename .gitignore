@@ -2,3 +2,5 @@
 /TournamentServer/bin
 /TournamentServer/obj
 .DS_Store
+/.vs
+/TournamentServer/Properties/launchSettings.json

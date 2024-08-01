@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Http.Json;
 
 namespace TournamentSystem;
 
-/** 
+/**
     TODO:
        Create an OBF JSON from my format (in progress or finished)
        -- Create my format JSON for saving tournament
@@ -62,17 +62,25 @@ public class MyFormatConverter : JsonConverter<Tournament>
         }
     }
 
-    static internal int? GetNumberOrNull(ref Utf8JsonReader reader)
+    internal static int? GetNumberOrNull(ref Utf8JsonReader reader)
     {
-        if (reader.TokenType == JsonTokenType.Null) { return null; }
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
         return reader.GetInt32();
     }
 
-    public override Tournament? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Tournament? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
     {
         var jsonSettings = new JsonSerializerOptions
         {
-            Converters = {
+            Converters =
+            {
                 new SetConverter(),
                 new GameConverter(),
                 new JsonStringEnumConverter<Tournament.TournamentStatus>(),
@@ -105,9 +113,16 @@ public class MyFormatConverter : JsonConverter<Tournament>
                         reader.Read(); // Read the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            SetLinksReport report = sc.ReadIntoLinksReport(ref reader, typeof(Set), jsonSettings);
+                            SetLinksReport report = sc.ReadIntoLinksReport(
+                                ref reader,
+                                typeof(Set),
+                                jsonSettings
+                            );
                             setsToLink.Add(report);
-                            while (reader.TokenType != JsonTokenType.StartObject && reader.TokenType != JsonTokenType.EndArray)
+                            while (
+                                reader.TokenType != JsonTokenType.StartObject
+                                && reader.TokenType != JsonTokenType.EndArray
+                            )
                             {
                                 reader.Read();
                             }
@@ -119,10 +134,18 @@ public class MyFormatConverter : JsonConverter<Tournament>
                         reader.Read(); // Read the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            var entrant = JsonSerializer.Deserialize(ref reader, typeof(Entrant), jsonSettings);
-                            if (entrant is null) throw new JsonException();
+                            var entrant = JsonSerializer.Deserialize(
+                                ref reader,
+                                typeof(Entrant),
+                                jsonSettings
+                            );
+                            if (entrant is null)
+                                throw new JsonException();
                             entrants.Add((Entrant)entrant);
-                            while (reader.TokenType != JsonTokenType.StartObject && reader.TokenType != JsonTokenType.EndArray)
+                            while (
+                                reader.TokenType != JsonTokenType.StartObject
+                                && reader.TokenType != JsonTokenType.EndArray
+                            )
                             {
                                 reader.Read();
                             }
@@ -130,14 +153,29 @@ public class MyFormatConverter : JsonConverter<Tournament>
                     }
                     else if (reader.GetString() == "data")
                     {
-                        var readData = (Dictionary<string, string>?)JsonSerializer.Deserialize(ref reader, typeof(Dictionary<string, string>), jsonSettings);
-                        if (readData is null) { throw new JsonException(); }
+                        var readData = (Dictionary<string, string>?)
+                            JsonSerializer.Deserialize(
+                                ref reader,
+                                typeof(Dictionary<string, string>),
+                                jsonSettings
+                            );
+                        if (readData is null)
+                        {
+                            throw new JsonException();
+                        }
                         data = readData;
                     }
                     else if (reader.GetString() == "status")
                     {
-                        var readStatus = JsonSerializer.Deserialize(ref reader, typeof(Tournament.TournamentStatus), jsonSettings);
-                        if (readStatus is null) { throw new JsonException(); }
+                        var readStatus = JsonSerializer.Deserialize(
+                            ref reader,
+                            typeof(Tournament.TournamentStatus),
+                            jsonSettings
+                        );
+                        if (readStatus is null)
+                        {
+                            throw new JsonException();
+                        }
                         status = (Tournament.TournamentStatus)readStatus;
                     }
                     break;
@@ -176,7 +214,10 @@ public class MyFormatConverter : JsonConverter<Tournament>
         // We can do this now, as we can change the Ids into the object references (which we know now exist)
         foreach (var setReport in setsToLink)
         {
-            if (!sets.TryGetValue(setReport.SetId, out Set? set)) { throw new NullReferenceException(); }
+            if (!sets.TryGetValue(setReport.SetId, out Set? set))
+            {
+                throw new NullReferenceException();
+            }
             set.FillSetFromReport(sets, tour.Entrants, setReport);
         }
         foreach (Set set in sets.Values)
@@ -187,18 +228,26 @@ public class MyFormatConverter : JsonConverter<Tournament>
         tour.SetStatus(status);
         if (tour.Status != Tournament.TournamentStatus.Setup)
         {
-            if (!tour.VerifyStructure()) { throw new JsonException("Tournament structure of JSON being loaded is not valid."); }
+            if (!tour.VerifyStructure())
+            {
+                throw new JsonException("Tournament structure of JSON being loaded is not valid.");
+            }
         }
 
         return tour;
     }
 
-    public override void Write(Utf8JsonWriter writer, Tournament value, JsonSerializerOptions options)
+    public override void Write(
+        Utf8JsonWriter writer,
+        Tournament value,
+        JsonSerializerOptions options
+    )
     {
         // TODO: Enable some leakage through of the input settings
         var jsonSettings = new JsonSerializerOptions
         {
-            Converters = {
+            Converters =
+            {
                 new SetConverter(),
                 new GameConverter(),
                 new JsonStringEnumConverter<Tournament.TournamentStatus>(),
@@ -254,12 +303,20 @@ public class MyFormatConverter : JsonConverter<Tournament>
 
 public class SetConverter : JsonConverter<Set>
 {
-    public override Set? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Set? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
     {
         return (Set?)JsonSerializer.Deserialize(ref reader, typeof(Set), options);
     }
 
-    internal MyFormatConverter.SetLinksReport ReadIntoLinksReport(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    internal MyFormatConverter.SetLinksReport ReadIntoLinksReport(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
     {
         int propertiesRead = 0;
         bool readStartToken = false;
@@ -310,22 +367,34 @@ public class SetConverter : JsonConverter<Set>
                         reader.Read(); // Read to get to the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            MyFormatConverter.GameLinksReport gameReport = gc.ReadIntoLinksReport(ref reader, typeof(Set.Game), options);
+                            MyFormatConverter.GameLinksReport gameReport = gc.ReadIntoLinksReport(
+                                ref reader,
+                                typeof(Set.Game),
+                                options
+                            );
                             report.Games.Add(gameReport);
                             reader.Read();
                         }
                         break;
                     case "setDecider":
                         var swdc = new SetWinnerDeciderConverter();
-                        report.WinnerDecider = swdc.Read(ref reader, typeof(Set.IWinnerDecider), options);
+                        report.WinnerDecider = swdc.Read(
+                            ref reader,
+                            typeof(Set.IWinnerDecider),
+                            options
+                        );
                         break;
                     case "data":
-                        report.Data = JsonSerializer.Deserialize<Dictionary<string, string>>(ref reader, options);
+                        report.Data = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                            ref reader,
+                            options
+                        );
                         break;
                 }
                 propertiesRead += 1;
             }
-            if (propertiesRead == 12) break;
+            if (propertiesRead == 12)
+                break;
         }
         return report;
     }
@@ -381,7 +450,7 @@ public class SetConverter : JsonConverter<Set>
                     writer.WriteNullValue();
                 }
                 else
-                {   // TODO: Replace this with a reflection search for a more appropriate method before defaulting to this
+                { // TODO: Replace this with a reflection search for a more appropriate method before defaulting to this
                     // this includes changing how the serializer looks
                     JsonSerializer.Serialize(writer, (Set.IWinnerDecider)sD, options);
                 }
@@ -389,7 +458,12 @@ public class SetConverter : JsonConverter<Set>
             else
             {
                 var propertyValue = property.GetValue(value);
-                JsonSerializer.Serialize(writer, propertyValue, propertyValue?.GetType() ?? typeof(object), options);
+                JsonSerializer.Serialize(
+                    writer,
+                    propertyValue,
+                    propertyValue?.GetType() ?? typeof(object),
+                    options
+                );
             }
         }
         writer.WriteEndObject();
@@ -398,13 +472,26 @@ public class SetConverter : JsonConverter<Set>
 
 public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
 {
-    public override Set.IWinnerDecider? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Set.IWinnerDecider? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
     {
-        var properties = JsonSerializer.Deserialize<Dictionary<string, object?>>(ref reader, options);
-        if (properties is null) { return null; }
+        var properties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            ref reader,
+            options
+        );
+        if (properties is null)
+        {
+            return null;
+        }
         if (properties.TryGetValue("type", out object? typeValue))
         {
-            if (typeValue is null) { throw new NullReferenceException(); }
+            if (typeValue is null)
+            {
+                throw new NullReferenceException();
+            }
             bool isAString = false;
             string? val = "";
             try
@@ -415,13 +502,17 @@ public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
             catch { }
             if (isAString && val is not null)
             {
-                var type = Assembly.GetExecutingAssembly().GetTypes().First(type => type.Name == val);
+                var type = Assembly
+                    .GetExecutingAssembly()
+                    .GetTypes()
+                    .First(type => type.Name == val);
 
                 if (type == typeof(Set.BestOfDecider))
                 {
                     if (properties.TryGetValue("amountOfWinsRequired", out object? amount))
                     {
-                        if (amount is null) throw new NullReferenceException();
+                        if (amount is null)
+                            throw new NullReferenceException();
                         int amountOfWins = ((JsonElement)amount).GetInt32();
                         return new Set.BestOfDecider(amountOfWins);
                     }
@@ -435,7 +526,11 @@ public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
         throw new JsonException();
     }
 
-    public override void Write(Utf8JsonWriter writer, Set.IWinnerDecider value, JsonSerializerOptions options)
+    public override void Write(
+        Utf8JsonWriter writer,
+        Set.IWinnerDecider value,
+        JsonSerializerOptions options
+    )
     {
         writer.WriteStartObject();
         writer.WriteString("type", value.GetType().Name);
@@ -453,12 +548,20 @@ public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
 
 public class GameConverter : JsonConverter<Set.Game>
 {
-    public override Set.Game? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Set.Game? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
     {
         throw new NotImplementedException();
     }
 
-    internal MyFormatConverter.GameLinksReport ReadIntoLinksReport(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    internal MyFormatConverter.GameLinksReport ReadIntoLinksReport(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
     {
         bool readStartToken = false;
         int propertiesRead = 0;
@@ -488,18 +591,29 @@ public class GameConverter : JsonConverter<Set.Game>
                         report.GameWinnerId = MyFormatConverter.GetNumberOrNull(ref reader);
                         break;
                     case "status":
-                        Enum.TryParse(reader.GetString()!, true, out Set.Game.GameStatus statusEnum);
+                        Enum.TryParse(
+                            reader.GetString()!,
+                            true,
+                            out Set.Game.GameStatus statusEnum
+                        );
                         report.Status = statusEnum;
                         break;
                     case "data":
-                        report.Data = JsonSerializer.Deserialize<Dictionary<string, string>>(ref reader, options)!;
+                        report.Data = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                            ref reader,
+                            options
+                        )!;
                         break;
                 }
                 propertiesRead += 1;
             }
-            if (propertiesRead == 6) break;
+            if (propertiesRead == 6)
+                break;
         }
-        while (reader.TokenType != JsonTokenType.EndObject) { reader.Read(); }
+        while (reader.TokenType != JsonTokenType.EndObject)
+        {
+            reader.Read();
+        }
         return report;
     }
 
@@ -527,7 +641,12 @@ public class GameConverter : JsonConverter<Set.Game>
             else
             {
                 var propertyValue = property.GetValue(value);
-                JsonSerializer.Serialize(writer, propertyValue, propertyValue?.GetType() ?? typeof(object), options);
+                JsonSerializer.Serialize(
+                    writer,
+                    propertyValue,
+                    propertyValue?.GetType() ?? typeof(object),
+                    options
+                );
             }
         }
         writer.WriteEndObject();
@@ -536,13 +655,26 @@ public class GameConverter : JsonConverter<Set.Game>
 
 public class EntrantConverter : JsonConverter<Entrant>
 {
-    public override Entrant? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Entrant? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
     {
-        var properties = JsonSerializer.Deserialize<Dictionary<string, object?>>(ref reader, options);
-        if (properties is null) { return null; }
+        var properties = JsonSerializer.Deserialize<Dictionary<string, object?>>(
+            ref reader,
+            options
+        );
+        if (properties is null)
+        {
+            return null;
+        }
         if (properties.TryGetValue("type", out object? typeValue))
         {
-            if (typeValue is null) { throw new JsonException(); }
+            if (typeValue is null)
+            {
+                throw new JsonException();
+            }
             bool isAString = false;
             string? val = "";
             try
@@ -553,38 +685,62 @@ public class EntrantConverter : JsonConverter<Entrant>
             catch { }
             if (isAString && val is not null)
             {
-                var type = Assembly.GetExecutingAssembly().GetTypes().First(type => type.Name == val);
-                if (!properties.TryGetValue("entrantId", out object? idObj) || idObj is null) { throw new JsonException(); }
+                var type = Assembly
+                    .GetExecutingAssembly()
+                    .GetTypes()
+                    .First(type => type.Name == val);
+                if (!properties.TryGetValue("entrantId", out object? idObj) || idObj is null)
+                {
+                    throw new JsonException();
+                }
                 int id = ((JsonElement)idObj).GetInt32();
                 Dictionary<string, string> data = new();
-                if (properties.TryGetValue("entrantData", out object? dataObj) && dataObj is not null)
+                if (
+                    properties.TryGetValue("entrantData", out object? dataObj)
+                    && dataObj is not null
+                )
                 {
                     data = JsonParseHelper.ParseJsonElementIntoDict((JsonElement)dataObj);
                 }
                 if (type == typeof(IndividualEntrant))
                 {
                     properties.TryGetValue("individualName", out object? indNameObj);
-                    if (indNameObj is null) throw new JsonException();
+                    if (indNameObj is null)
+                        throw new JsonException();
 
-                    var nameDict = JsonParseHelper.ParseJsonElementIntoDict((JsonElement)indNameObj);
+                    var nameDict = JsonParseHelper.ParseJsonElementIntoDict(
+                        (JsonElement)indNameObj
+                    );
                     if (nameDict.TryGetValue("tag", out string? tag) && tag is not null)
                     {
                         return new IndividualEntrant(id, tag, data);
                     }
-                    else if (nameDict.TryGetValue("firstName", out string? firstName) && nameDict.TryGetValue("lastName", out string? lastName))
+                    else if (
+                        nameDict.TryGetValue("firstName", out string? firstName)
+                        && nameDict.TryGetValue("lastName", out string? lastName)
+                    )
                     {
-                        if (firstName is null || lastName is null) { throw new JsonException(); }
+                        if (firstName is null || lastName is null)
+                        {
+                            throw new JsonException();
+                        }
                         return new IndividualEntrant(id, firstName, lastName, data);
                     }
                 }
                 else if (type == typeof(TeamEntrant))
                 {
                     properties.TryGetValue("teamName", out object? teamNameObj);
-                    if (teamNameObj is null) throw new JsonException();
-                    string teamName = ((JsonElement)teamNameObj).GetString() ?? throw new JsonException();
+                    if (teamNameObj is null)
+                        throw new JsonException();
+                    string teamName =
+                        ((JsonElement)teamNameObj).GetString() ?? throw new JsonException();
 
-                    properties.TryGetValue("individualEntrants", out object? individualEntrantsObjects);
-                    if (individualEntrantsObjects is null) throw new JsonException();
+                    properties.TryGetValue(
+                        "individualEntrants",
+                        out object? individualEntrantsObjects
+                    );
+                    if (individualEntrantsObjects is null)
+                        throw new JsonException();
                     List<IndividualEntrant> individualEntrants = new();
                     foreach (var obj in ((JsonElement)individualEntrantsObjects).EnumerateArray())
                     {
@@ -592,7 +748,10 @@ public class EntrantConverter : JsonConverter<Entrant>
                     }
                     return new TeamEntrant(id, teamName, individualEntrants);
                 }
-                else { throw new JsonException(); }
+                else
+                {
+                    throw new JsonException();
+                }
             }
         }
         return null;
@@ -605,23 +764,35 @@ public class EntrantConverter : JsonConverter<Entrant>
         {
             properties.Add(val.Name, val.Value);
         }
-        if (!properties.TryGetValue("entrantId", out JsonElement idObj)) { throw new JsonException(); }
+        if (!properties.TryGetValue("entrantId", out JsonElement idObj))
+        {
+            throw new JsonException();
+        }
         int id = idObj.GetInt32();
         Dictionary<string, string> data = new();
         if (properties.TryGetValue("entrantData", out JsonElement dataObj))
         {
             data = JsonParseHelper.ParseJsonElementIntoDict(dataObj);
         }
-        if (!properties.TryGetValue("individualName", out JsonElement indNameObj)) { throw new JsonException(); }
+        if (!properties.TryGetValue("individualName", out JsonElement indNameObj))
+        {
+            throw new JsonException();
+        }
 
         var nameDict = JsonParseHelper.ParseJsonElementIntoDict(indNameObj);
         if (nameDict.TryGetValue("tag", out string? tag) && tag is not null)
         {
             return new IndividualEntrant(id, tag, data);
         }
-        else if (nameDict.TryGetValue("firstName", out string? firstName) && nameDict.TryGetValue("lastName", out string? lastName))
+        else if (
+            nameDict.TryGetValue("firstName", out string? firstName)
+            && nameDict.TryGetValue("lastName", out string? lastName)
+        )
         {
-            if (firstName is null || lastName is null) { throw new JsonException(); }
+            if (firstName is null || lastName is null)
+            {
+                throw new JsonException();
+            }
             return new IndividualEntrant(id, firstName, lastName, data);
         }
         throw new JsonException();
@@ -676,7 +847,10 @@ public class EntrantConverter : JsonConverter<Entrant>
             {
                 writer.WritePropertyName(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
                 var propertyValue = property.GetValue(value);
-                if (propertyValue is null) { throw new JsonException(); }
+                if (propertyValue is null)
+                {
+                    throw new JsonException();
+                }
                 var listOfIndividuals = (List<IndividualEntrant>)propertyValue;
                 EntrantConverter ec = new();
                 writer.WriteStartArray();
@@ -690,7 +864,12 @@ public class EntrantConverter : JsonConverter<Entrant>
             {
                 writer.WritePropertyName(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
                 var propertyValue = property.GetValue(value);
-                JsonSerializer.Serialize(writer, propertyValue, propertyValue?.GetType() ?? typeof(object), options);
+                JsonSerializer.Serialize(
+                    writer,
+                    propertyValue,
+                    propertyValue?.GetType() ?? typeof(object),
+                    options
+                );
             }
         }
         writer.WriteEndObject();
