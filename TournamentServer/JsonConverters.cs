@@ -53,7 +53,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
         public int? Entrant1Id { get; set; }
         public int? Entrant2Id { get; set; }
         public int? GameWinnerId { get; set; }
-        public Game.GameStatus? Status { get; set; }
+        public Set.Game.GameStatus? Status { get; set; }
         public Dictionary<string, string> Data { get; set; }
 
         public GameLinksReport()
@@ -76,7 +76,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                 new SetConverter(),
                 new GameConverter(),
                 new JsonStringEnumConverter<Set.SetStatus>(),
-                new JsonStringEnumConverter<Game.GameStatus>(),
+                new JsonStringEnumConverter<Set.Game.GameStatus>(),
                 new SetWinnerDeciderConverter(),
                 new EntrantConverter()
             },
@@ -195,7 +195,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                 new SetConverter(),
                 new GameConverter(),
                 new JsonStringEnumConverter<Set.SetStatus>(),
-                new JsonStringEnumConverter<Game.GameStatus>(),
+                new JsonStringEnumConverter<Set.Game.GameStatus>(),
                 new SetWinnerDeciderConverter(),
                 new EntrantConverter()
             },
@@ -300,7 +300,7 @@ public class SetConverter : JsonConverter<Set>
                         reader.Read(); // Read to get to the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            MyFormatConverter.GameLinksReport gameReport = gc.ReadIntoLinksReport(ref reader, typeof(Game), options);
+                            MyFormatConverter.GameLinksReport gameReport = gc.ReadIntoLinksReport(ref reader, typeof(Set.Game), options);
                             report.Games.Add(gameReport);
                             reader.Read();
                         }
@@ -441,9 +441,9 @@ public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
     }
 }
 
-public class GameConverter : JsonConverter<Game>
+public class GameConverter : JsonConverter<Set.Game>
 {
-    public override Game? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override Set.Game? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         throw new NotImplementedException();
     }
@@ -478,7 +478,7 @@ public class GameConverter : JsonConverter<Game>
                         report.GameWinnerId = MyFormatConverter.GetNumberOrNull(ref reader);
                         break;
                     case "status":
-                        Enum.TryParse(reader.GetString()!, true, out Game.GameStatus statusEnum);
+                        Enum.TryParse(reader.GetString()!, true, out Set.Game.GameStatus statusEnum);
                         report.Status = statusEnum;
                         break;
                     case "data":
@@ -493,7 +493,7 @@ public class GameConverter : JsonConverter<Game>
         return report;
     }
 
-    public override void Write(Utf8JsonWriter writer, Game value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, Set.Game value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
         foreach (var property in value.GetType().GetProperties())

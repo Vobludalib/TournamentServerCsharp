@@ -443,59 +443,99 @@ public class Set
             return true;
         }
     }
-}
 
-public class Game
-{
-    public readonly Set _parentSet;
-    private readonly int _gameNumber;
-    // Stored separately to the sets teams, as for certain games Team 1 and Team 2 may have meanings
-    // (e.g. side selection)
-    private readonly Entrant _entrant1;
-    private readonly Entrant _entrant2;
-    private Entrant? _gameWinner;
-    private GameStatus _status;
-
-    public int GameNumber => _gameNumber;
-    public Entrant Entrant1 => _entrant1;
-    public Entrant Entrant2 => _entrant2;
-    // Must be set via a method to allow for certain possible checks
-    public Entrant? GameWinner => _gameWinner;
-
-    public GameStatus Status => _status;
-
-    public enum GameStatus { Waiting, InProgress, Finished }
-
-    // Dictionary for the other data, stored as a string, and will be parsed when and if necessary
-    // Given that the kind of data stored here can have a variety of formats, no point trying to parse here
-    // The parsing can happen when and if needed when working with the game data.
-    private Dictionary<string, string> _data = new();
-    public Dictionary<string, string> Data => _data;
-
-    public Game(Set ParentSet, int GameNumber, Entrant Entrant1, Entrant Entrant2, Dictionary<string, string>? Data = null)
+    internal object GetLocker()
     {
-        _parentSet = ParentSet;
-        _gameNumber = GameNumber;
-        _entrant1 = Entrant1;
-        _entrant2 = Entrant2;
-        if (Data is null) _data = new Dictionary<string, string>();
-        _data = Data!;
-        _status = GameStatus.Waiting;
+        return _locker;
     }
 
-    public void SetWinner(Entrant winner)
+    public class Game
     {
-        if (winner != Entrant1 && winner != Entrant2) throw new InvalidOperationException();
-        _gameWinner = winner;
-    }
+        public readonly Set _parentSet;
+        private readonly int _gameNumber;
+        // Stored separately to the sets teams, as for certain games Team 1 and Team 2 may have meanings
+        // (e.g. side selection)
+        private readonly Entrant _entrant1;
+        private readonly Entrant _entrant2;
+        private Entrant? _gameWinner;
+        private GameStatus _status;
+        private object _locker;
 
-    /// <summary>
-    /// Overrides the checks - DO NOT USE UNLESS YOU ARE LOADING A GAME FROM SOMEWHERE
-    /// </summary>
-    /// <param name="status"></param>
-    internal void SetStatus(GameStatus status)
-    {
-        _status = status;
+        public int GameNumber => _gameNumber;
+        public Entrant Entrant1 => _entrant1;
+        public Entrant Entrant2 => _entrant2;
+        public Entrant? GameWinner => _gameWinner;
+
+        public GameStatus Status => _status;
+
+        public enum GameStatus { Waiting, InProgress, Finished }
+
+        // Dictionary for the other data, stored as a string, and will be parsed when and if necessary
+        // Given that the kind of data stored here can have a variety of formats, no point trying to parse here
+        // The parsing can happen when and if needed when working with the game data.
+        private Dictionary<string, string> _data = new();
+        public Dictionary<string, string> Data => _data;
+
+        public Game(Set ParentSet, int GameNumber, Entrant Entrant1, Entrant Entrant2, Dictionary<string, string>? Data = null)
+        {
+            _parentSet = ParentSet;
+            _gameNumber = GameNumber;
+            _entrant1 = Entrant1;
+            _entrant2 = Entrant2;
+            if (Data is null) _data = new Dictionary<string, string>();
+            _data = Data!;
+            _status = GameStatus.Waiting;
+            _locker = new();
+        }
+
+        /// <summary>
+        /// Method to move from InProgress to Waiting - should only be used to roll-back misclicks. Returns true if succesful, otherwise false.
+        /// </summary>
+        /// <returns></returns>
+        public bool TryMovingToWaiting()
+        {
+            lock (_locker)
+            {
+                if (_status == GameStatus.InProgress) { _status = GameStatus.Waiting; return true; }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Method to move from Waiting to InProgress. Returns true if succesful, otherwise false.
+        /// </summary>
+        /// <returns></returns>
+        public bool TryMovingToInProgress()
+        {
+            lock (_locker)
+            {
+                if (_status == GameStatus.Waiting) { _status = GameStatus.InProgress; return true; }
+                return false;
+            }
+        }
+
+        public void SetWinner(Entrant winner)
+        {
+            // Locking set locker first, so no one can change set (such as removing this game from the set), while we are doing something
+            lock (_parentSet._locker)
+            {
+                lock (_locker)
+                {
+                    if (winner != Entrant1 && winner != Entrant2) throw new InvalidOperationException();
+                    _gameWinner = winner;
+                    _status = GameStatus.Finished;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Overrides the checks - DO NOT USE UNLESS YOU ARE LOADING A GAME FROM SOMEWHERE
+        /// </summary>
+        /// <param name="status"></param>
+        internal void SetStatus(GameStatus status)
+        {
+            _status = status;
+        }
     }
 }
 
