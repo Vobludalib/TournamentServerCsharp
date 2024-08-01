@@ -10,6 +10,7 @@ TODO:
     Tournament, Sets, Games, Entrants
     Progressing through a tournament - handled per request - multithreading
         Set winner decision defined in JSON (BOx or some other format)
+    Verifying via graph search that tournament is valid (no cycles, each set can be filled correctly + states are correct (when loading))
 **/
 
 public class Tournament
@@ -444,9 +445,42 @@ public class Set
         }
     }
 
-    internal object GetLocker()
+    /// <summary>
+    /// Method for moving winner and loser to the sets they play in next (if any). Returns true on success, false otherwise.
+    /// </summary>
+    /// <returns></returns>
+    public bool TryProgressingWinnerAndLoser()
     {
-        return _locker;
+        lock (_locker)
+        {
+            if (_status != SetStatus.Finished) return false;
+            if (_winner is null || _loser is null) return false;
+            if (_setWinnerGoesTo is not null)
+            {
+                lock (_setWinnerGoesTo._locker)
+                {
+                    if (_setWinnerGoesTo._entrant1 is not null) _setWinnerGoesTo._entrant1 = _winner;
+                    else if (_setWinnerGoesTo._entrant2 is not null) _setWinnerGoesTo._entrant2 = _winner;
+                    else if (_setWinnerGoesTo._entrant1 != _winner && _setWinnerGoesTo._entrant2 != _winner)
+                    {
+                        throw new InvalidOperationException("Moving an entrant to an already filled set");
+                    }
+                }
+            }
+            if (_setLoserGoesTo is not null)
+            {
+                lock (_setLoserGoesTo._locker)
+                {
+                    if (_setLoserGoesTo._entrant1 is not null) _setLoserGoesTo._entrant1 = _loser;
+                    else if (_setLoserGoesTo._entrant2 is not null) _setLoserGoesTo._entrant2 = _loser;
+                    else if (_setLoserGoesTo._entrant1 != _loser && _setLoserGoesTo._entrant2 != _loser)
+                    {
+                        throw new InvalidOperationException("Moving an entrant to an already filled set");
+                    }
+                }
+            }
+            return true;
+        }
     }
 
     public class Game
@@ -541,7 +575,6 @@ public class Set
 
 public abstract record class Entrant
 {
-
     static protected List<Entrant>? _entrants;
     public int EntrantId { get; init; }
 
@@ -555,7 +588,7 @@ public abstract record class Entrant
 public record class IndividualEntrant : Entrant
 {
     // This is kept as an EntrantName type - this is because I allow the JSON to specify the info
-    // firstName, lastName if you want to store them seperately, or just name for a string name.
+    // firstName, lastName if you want to store them seperately, or just tag for a single string.
     public Name EntrantName { get; init; }
 
     public abstract class Name
