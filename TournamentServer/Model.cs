@@ -1,6 +1,7 @@
 ///Countable
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 namespace TournamentSystem;
 
@@ -16,6 +17,9 @@ public class Tournament
     private Dictionary<int, Set> _sets { get; set; }
     private Dictionary<int, Entrant> _entrants { get; set; }
     private Dictionary<string, string> _data { get; set; }
+    private object _setLocker;
+    private object _entrantsLocker;
+    private object _dataLocker;
 
     public IReadOnlyDictionary<int, Set> Sets => _sets;
     public IReadOnlyDictionary<int, Entrant> Entrants => _entrants;
@@ -26,61 +30,75 @@ public class Tournament
         _sets = new Dictionary<int, Set>();
         _entrants = new Dictionary<int, Entrant>();
         _data = new Dictionary<string, string>();
+        _setLocker = new();
+        _entrantsLocker = new();
+        _dataLocker = new();
     }
 
     public bool AddSet(Set set)
     {
-        try
+        lock (_setLocker)
         {
-            _sets.Add(set.SetId, set);
-            return true;
+            try
+            {
+                _sets.Add(set.SetId, set);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
-        catch
-        {
-            return false;
-        }
-
     }
 
     public bool AddEntrant(Entrant entrant)
     {
-        try
+        lock (_entrantsLocker)
         {
-            _entrants.Add(entrant.EntrantId, entrant);
-            return true;
-        }
-        catch
-        {
-            return false;
+            try
+            {
+                _entrants.Add(entrant.EntrantId, entrant);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 
     public bool ModifyData(string label, string value)
     {
-        try
+        lock (_dataLocker)
         {
-            if (_data.ContainsKey(label)) _data[label] = value;
-            else
+            try
             {
-                _data.Add(label, value);
+                if (_data.ContainsKey(label)) _data[label] = value;
+                else
+                {
+                    _data.Add(label, value);
+                }
+                return true;
             }
-            return true;
-        }
-        catch
-        {
-            return false;
+            catch
+            {
+                return false;
+            }
         }
     }
 
     public bool DeleteData(string label)
     {
-        if (_data.ContainsKey(label))
+        lock (_dataLocker)
         {
-            _data.Remove(label); return true;
-        }
-        else
-        {
-            return false;
+            if (_data.ContainsKey(label))
+            {
+                _data.Remove(label); return true;
+            }
+            else
+            {
+                return false;
+            }
         }
     }
 }
@@ -102,80 +120,140 @@ public class Set
     private List<Game> _games;
     private IWinnerDecider? _setDecider;
     private Dictionary<string, string> _data;
+    private object _locker;
 
     public int SetId
     {
         get => _setId;
-        set => _setId = value;
     }
 
     public string? SetName
     {
         get => _setName;
-        set => _setName = value;
+        set
+        {
+            lock (_locker)
+            {
+                if (_status != SetStatus.IncompleteSetup)
+                {
+                    throw new InvalidOperationException("Cannot change set name after set setup");
+                }
+                _setName = value;
+            }
+        }
     }
 
     public Entrant? Entrant1
     {
         get => _entrant1;
-        set => _entrant1 = value;
+        set
+        {
+            lock (_locker)
+            {
+                if (_status != SetStatus.IncompleteSetup)
+                {
+                    throw new InvalidOperationException("Cannot change entrants after set setup.");
+                }
+                _entrant2 = value;
+            }
+        }
     }
 
     public Entrant? Entrant2
     {
         get => _entrant2;
-        set => _entrant2 = value;
+        set
+        {
+            lock (_locker)
+            {
+                if (_status != SetStatus.IncompleteSetup) throw new InvalidOperationException("Cannot change entrants after set setup.");
+                _entrant2 = value;
+            }
+        }
     }
 
     public SetStatus Status
     {
         get => _status;
-        set => _status = value;
+        // No setter, state transitions are handled via the methods
     }
 
     public Set? SetWinnerGoesTo
     {
         get => _setWinnerGoesTo;
-        set => _setWinnerGoesTo = value;
+        set
+        {
+            lock (_locker)
+            {
+                if (_status != SetStatus.IncompleteSetup)
+                {
+                    throw new InvalidOperationException("Cannot change where winner goes after set setup.");
+                }
+                _setWinnerGoesTo = value;
+            }
+        }
     }
 
     public Set? SetLoserGoesTo
     {
         get => _setLoserGoesTo;
-        set => _setLoserGoesTo = value;
+        set
+        {
+            lock (_locker)
+            {
+                if (_status != SetStatus.IncompleteSetup)
+                {
+                    throw new InvalidOperationException("Cannot change where loser goes after set setup.");
+                }
+                _setLoserGoesTo = value;
+            }
+        }
     }
 
     public Entrant? Winner
     {
         get => _winner;
-        set => _winner = value;
     }
 
     public Entrant? Loser
     {
         get => _loser;
-        set => _loser = value;
     }
 
     public List<Game> Games
     {
         get => _games;
-        set => _games = value;
     }
 
     public IWinnerDecider? SetDecider
     {
         get => _setDecider;
-        set => _setDecider = value;
+        set
+        {
+            lock (_locker)
+            {
+                if (_status != SetStatus.IncompleteSetup)
+                {
+                    throw new InvalidOperationException("Cannot change winner decider  after set setup.");
+                }
+                _setDecider = value;
+            }
+        }
     }
 
     public Dictionary<string, string> Data
     {
         get => _data;
-        set => _data = value;
+        set
+        {
+            lock (_locker)
+            {
+                _data = value;
+            }
+        }
     }
 
-    public enum SetStatus { IncompleteSetup, WaitingForEntrantsData, WaitingForStart, InProgress, Finished }
+    public enum SetStatus { IncompleteSetup, WaitingForStart, InProgress, Finished }
 
     // I only have a constructor with only ID, as the fields will be set later. This is because
     // of the order in which a tournament must be reconstructed from JSON, but also
@@ -198,6 +276,8 @@ public class Set
         _games = new List<Game>();
 
         _sets.Add(this);
+
+        _locker = new();
     }
 
     /// <summary>
@@ -253,6 +333,115 @@ public class Set
             }
 
             throw new NotImplementedException("Other alternative states not handled currently");
+        }
+    }
+
+    /// <summary>
+    /// Method used only for JSON conversion - required due to JSON using ID based storage of entrants and sets
+    /// along with Status and the like being inaccesible from outside the Set class
+    /// </summary>
+    /// <param name="sets"></param>
+    /// <param name="entrants"></param>
+    /// <param name="report"></param>
+    /// <exception cref="JsonException"></exception>
+    internal void FillSetFromReport(Dictionary<int, Set> sets, IReadOnlyDictionary<int, Entrant> entrants, MyFormatConverter.SetLinksReport report)
+    {
+        _setName = report.SetName;
+        _entrant1 = report.Entrant1Id is null ? null : entrants[(int)report.Entrant1Id];
+        _entrant2 = report.Entrant2Id is null ? null : entrants[(int)report.Entrant2Id];
+        _status = report.Status;
+        if (((_status == SetStatus.Finished) && (_entrant1 is null || _entrant2 is null || _winner is null || _loser is null)) || ((_status == SetStatus.InProgress) && (_entrant1 is null || _entrant2 is null)))
+        {
+            // Essentially if we read Finished or InProgress without the correct prerequisites to be in that state, then the JSON is invalid
+            throw new JsonException("Loading a Finished or InProgress set that does not have the necessary prerequisites to be in that state.");
+        }
+        _setWinnerGoesTo = report.WinnerGoesToId is null ? null : sets[(int)report.WinnerGoesToId];
+        _setLoserGoesTo = report.LoserGoesToId is null ? null : sets[(int)report.LoserGoesToId];
+        _winner = report.Winner is null ? null : entrants[(int)report.Winner];
+        _loser = report.Loser is null ? null : entrants[(int)report.Loser];
+        _setDecider = report.WinnerDecider;
+        _data = report.Data ?? new Dictionary<string, string>();
+        // Create all relevant games
+        foreach (MyFormatConverter.GameLinksReport gr in report.Games!)
+        {
+            List<Entrant> reducedSearch = [_entrant1, _entrant2];
+            Entrant e1 = reducedSearch.First(x => x.EntrantId == gr.Entrant1Id);
+            Entrant e2 = reducedSearch.First(x => x.EntrantId == gr.Entrant2Id);
+            Game game = new Game(this, gr.GameNumber, e1, e2, gr.Data);
+            Entrant? winner = reducedSearch.FirstOrDefault(x => x.EntrantId == gr.GameWinnerId);
+            if (winner is not null) game.SetWinner(winner);
+            if (gr.Status is null) { throw new JsonException(); }
+            game.SetStatus((Game.GameStatus)gr.Status);
+            _games.Add(game);
+        }
+    }
+
+    /// <summary>
+    /// If a set is InProgress, this method will evaluate whether the games are enough to decide a winner
+    /// using the provided IWinnerDecider. If a winner is found, Status is set to Finished.
+    /// </summary>
+    /// <returns></returns>
+    /// <exception cref="NullReferenceException"></exception>
+    public bool UpdateSetBasedOnGames()
+    {
+        lock (_locker)
+        {
+            if (_status != SetStatus.InProgress)
+            {
+                // If the game is not currently in progress, we should not even look at the games
+                return false;
+            }
+            if (_setDecider is null) { throw new NullReferenceException("Set is InProgress without a SetDecider set."); }
+            if (_entrant1 is null || _entrant2 is null) { throw new NullReferenceException("Set is InProgress without both entrants set."); }
+            Entrant? winner = _setDecider.DecideWinner(_entrant1, _entrant2, Games);
+            // If no winner, we return false.
+            if (winner is null) return false;
+            // Otherwise, we set the appropriate winner and loser properties
+            // We do not move players to their next set in this step, that is handled elsewhere
+            // there may be cases where we wish for these properties to be filled, but not do anything with them yet
+            if (winner == _entrant1)
+            {
+                _winner = _entrant1;
+                _loser = _entrant2;
+
+            }
+            else if (winner == _entrant2)
+            {
+                _winner = _entrant2;
+                _loser = _entrant1;
+            }
+            else { throw new NotImplementedException(); }
+            _status = SetStatus.Finished;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Method that tries to move Set to InProgress, if conditions are satisfied (returns true). Otherwise, returns false.
+    /// </summary>
+    /// <returns></returns>
+    public bool TryMoveToInProgress()
+    {
+        lock (_locker)
+        {
+            if (_status != SetStatus.WaitingForStart) return false;
+            _status = SetStatus.InProgress;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Method that tries to move Set to WaitingForStart, if all entrants and the winnerDecider are set (and we are in a valid state)
+    /// </summary>
+    /// <returns></returns>
+    public bool TryMoveToWaitingForStart()
+    {
+        lock (_locker)
+        {
+            if (_status != SetStatus.IncompleteSetup) return false;
+            if (_entrant1 is null || _entrant2 is null || _setDecider is null) return false;
+            _status = SetStatus.WaitingForStart;
+            return true;
         }
     }
 }

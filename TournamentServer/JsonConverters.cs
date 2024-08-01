@@ -16,20 +16,17 @@ namespace TournamentSystem;
 /** 
     TODO:
        Create an OBF JSON from my format (in progress or finished)
-       Create my format JSON for saving tournament
+       -- Create my format JSON for saving tournament
        Serialize select information into my own JSON format for server-sending for API
        Allow more JSON options to affect the output
-    **/
-/** 
-TODO:
-    Convert from OBF to my format (more used for reconstructing brackets rather than changing them)
-    Read my format JSON and load it
+        Convert from OBF to my format (more used for reconstructing brackets rather than changing them)
+        Read my format JSON and load it
 
-    Have to create from OBF in multiple steps
-        Read entrants
-        Read Sets
-        Read Games
-        Update Sets with link
+        Have to create from OBF in multiple steps
+            Read entrants
+            Read Sets
+            Read Games
+            Update Sets with link
 **/
 
 public class MyFormatConverter : JsonConverter<Tournament>
@@ -179,7 +176,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
         foreach (var setReport in setsToLink)
         {
             if (!sets.TryGetValue(setReport.SetId, out Set? set)) { throw new NullReferenceException(); }
-            FillSetFromReport(set!, sets, tour.Entrants, setReport);
+            set.FillSetFromReport(sets, tour.Entrants, setReport);
         }
         foreach (Set set in sets.Values)
         {
@@ -187,33 +184,6 @@ public class MyFormatConverter : JsonConverter<Tournament>
         }
 
         return tour;
-    }
-
-    private void FillSetFromReport(Set set, Dictionary<int, Set> sets, IReadOnlyDictionary<int, Entrant> entrants, SetLinksReport report)
-    {
-        set.SetName = report.SetName;
-        set.Entrant1 = report.Entrant1Id is null ? null : entrants[(int)report.Entrant1Id];
-        set.Entrant2 = report.Entrant2Id is null ? null : entrants[(int)report.Entrant2Id];
-        set.Status = report.Status;
-        set.SetWinnerGoesTo = report.WinnerGoesToId is null ? null : sets[(int)report.WinnerGoesToId];
-        set.SetLoserGoesTo = report.LoserGoesToId is null ? null : sets[(int)report.LoserGoesToId];
-        set.Winner = report.Winner is null ? null : entrants[(int)report.Winner];
-        set.Loser = report.Loser is null ? null : entrants[(int)report.Loser];
-        set.SetDecider = report.WinnerDecider;
-        set.Data = report.Data ?? new Dictionary<string, string>();
-        // Create all relevant games
-        foreach (GameLinksReport gr in report.Games!)
-        {
-            List<Entrant> reducedSearch = [set.Entrant1, set.Entrant2];
-            Entrant e1 = reducedSearch.First(x => x.EntrantId == gr.Entrant1Id);
-            Entrant e2 = reducedSearch.First(x => x.EntrantId == gr.Entrant2Id);
-            Game game = new Game(set, gr.GameNumber, e1, e2, gr.Data);
-            Entrant? winner = reducedSearch.FirstOrDefault(x => x.EntrantId == gr.GameWinnerId);
-            if (winner is not null) game.SetWinner(winner);
-            if (gr.Status is null) { throw new JsonException(); }
-            game.SetStatus((Game.GameStatus)gr.Status);
-            set.Games.Add(game);
-        }
     }
 
     public override void Write(Utf8JsonWriter writer, Tournament value, JsonSerializerOptions options)
