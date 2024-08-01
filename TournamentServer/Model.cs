@@ -135,6 +135,10 @@ public class Tournament
         Dictionary<int, List<int>> adjacents = new();
         foreach (Set set in _sets.Values)
         {
+            adjacents[set.SetId] = new();
+        }
+        foreach (Set set in _sets.Values)
+        {
             if (set.SetWinnerGoesTo is not null) { adjacents[set.SetId].Add(set.SetWinnerGoesTo.SetId); }
             if (set.SetLoserGoesTo is not null) { adjacents[set.SetId].Add(set.SetLoserGoesTo.SetId); }
         }

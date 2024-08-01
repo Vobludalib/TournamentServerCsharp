@@ -23,7 +23,7 @@
       "entrant1": 3,
       "entrant2": null,
       "status": "IncompleteSetup",
-      "setWinnerGoesTo": 1,
+      "setWinnerGoesTo": null,
       "setLoserGoesTo": null,
       "winner": null,
       "loser": null,
@@ -70,5 +70,6 @@
       "entrantData": {}
     }
   ],
-  "data": {}
+  "data": {},
+  "status": "InProgress"
 }

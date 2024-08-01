@@ -130,13 +130,15 @@ public class MyFormatConverter : JsonConverter<Tournament>
                     }
                     else if (reader.GetString() == "data")
                     {
-                        var readData = (Dictionary<string, string>?)JsonSerializer.Deserialize(ref reader, typeof(Dictionary<string, string>), options);
+                        var readData = (Dictionary<string, string>?)JsonSerializer.Deserialize(ref reader, typeof(Dictionary<string, string>), jsonSettings);
                         if (readData is null) { throw new JsonException(); }
                         data = readData;
                     }
                     else if (reader.GetString() == "status")
                     {
-                        status = (Tournament.TournamentStatus)(JsonSerializer.Deserialize(ref reader, typeof(Tournament.TournamentStatus), options) ?? Tournament.TournamentStatus.Setup);
+                        var readStatus = JsonSerializer.Deserialize(ref reader, typeof(Tournament.TournamentStatus), jsonSettings);
+                        if (readStatus is null) { throw new JsonException(); }
+                        status = (Tournament.TournamentStatus)readStatus;
                     }
                     break;
             }
