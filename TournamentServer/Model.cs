@@ -8,14 +8,6 @@ using System.Text.Json.Serialization;
 
 namespace TournamentSystem;
 
-/**
-TODO:
-    Tournament, Sets, Games, Entrants
-    Progressing through a tournament - handled per request - multithreading
-        Set winner decision defined in JSON (BOx or some other format)
-    Verifying via graph search that tournament is valid (no cycles, each set can be filled correctly + states are correct (when loading))
-**/
-
 public class Tournament
 {
     private Dictionary<int, Set> _sets { get; set; }
@@ -647,7 +639,11 @@ public class Set
         // Create all relevant games
         foreach (MyFormatConverter.GameLinksReport gr in report.Games!)
         {
-            List<Entrant> reducedSearch = [_entrant1, _entrant2];
+            List<Entrant> reducedSearch = [];
+            if (_entrant1 is not null)
+                reducedSearch.Add(_entrant1);
+            if (_entrant2 is not null)
+                reducedSearch.Add(_entrant2);
             Entrant e1 = reducedSearch.First(x => x.EntrantId == gr.Entrant1Id);
             Entrant e2 = reducedSearch.First(x => x.EntrantId == gr.Entrant2Id);
             Game game = new Game(this, gr.GameNumber, e1, e2, gr.Data);
