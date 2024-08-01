@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -47,6 +48,17 @@ public class Program
         byte[] jsonData = File.ReadAllBytes(filePath);
         Utf8JsonReader reader = new(jsonData);
         var reconstructedTour = mf.Read(ref reader, typeof(Tournament), new JsonSerializerOptions());
+        // var firstSet = reconstructedTour!.Sets[1];
+        // _ = firstSet.TryMoveToWaitingForStart();
+        // _ = firstSet.TryMoveToInProgress();
+        // firstSet.Games.Add(new Set.Game(firstSet, 1, firstSet.Entrant1!, firstSet.Entrant2!));
+        // firstSet.Games[0].SetWinner(firstSet.Entrant1!);
+        // firstSet.Games.Add(new Set.Game(firstSet, 2, firstSet.Entrant1!, firstSet.Entrant2!));
+        // firstSet.Games[1].SetWinner(firstSet.Entrant1!);
+        // firstSet.Games.Add(new Set.Game(firstSet, 3, firstSet.Entrant1!, firstSet.Entrant2!));
+        // firstSet.Games[2].SetWinner(firstSet.Entrant1!);
+        // firstSet.UpdateSetBasedOnGames();
+        // firstSet.TryProgressingWinnerAndLoser();
         ;
     }
 }

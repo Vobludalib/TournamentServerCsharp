@@ -10,16 +10,7 @@
       "setLoserGoesTo": null,
       "winner": null,
       "loser": null,
-      "games": [
-        {
-          "gameNumber": 1,
-          "entrant1": 1,
-          "entrant2": 2,
-          "gameWinner": null,
-          "status": "Waiting",
-          "data": null
-        }
-      ],
+      "games": [],
       "setDecider": {
         "type": "BestOfDecider",
         "amountOfWinsRequired": 3
@@ -32,7 +23,7 @@
       "entrant1": 3,
       "entrant2": null,
       "status": "IncompleteSetup",
-      "setWinnerGoesTo": null,
+      "setWinnerGoesTo": 1,
       "setLoserGoesTo": null,
       "winner": null,
       "loser": null,
