@@ -36,6 +36,19 @@ class TournamentServer()
     TODO:
         Create all the endpoints with needed information
         Create all the endpoints for changing games
+
+        GET:
+            Whole Tournament JSON
+            Tournament data + status only
+            Set JSON
+            Set info only
+            Game JSON
+            Entrant JSON
+        POST:
+            Updating info in tournament + status transitions
+            Updating info in set + status transitions
+            Updating info in game + status transitions
+            Creating/updating/deleting entrant during tournament setup
     **/
 
     public class ServerHandler
@@ -50,14 +63,14 @@ class TournamentServer()
             entrantConverter = new();
         }
 
-        public IResult GetEntrantById(int id)
+        public async Task<IResult> GetEntrantById(int id)
         {
             if (tournament is null)
             {
                 return Results.BadRequest();
             }
-            var success = tournament.Entrants.TryGetValue(id, out var entrant);
-            if (!success)
+            var entrant = await tournament.TryGetEntrantAsync(id);
+            if (entrant is null)
             {
                 return Results.NotFound();
             }

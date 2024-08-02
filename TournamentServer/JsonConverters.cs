@@ -2,14 +2,9 @@
 
 using System.Data;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Security.Principal;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http.Json;
+using Nito.AsyncEx;
 
 namespace TournamentSystem;
 
@@ -186,19 +181,23 @@ public class MyFormatConverter : JsonConverter<Tournament>
 
         foreach (var key in data.Keys)
         {
-            tour.AddOrEditData(key, data[key]);
+            // Handling here for what should be a synchronous call - there are no contenders for the locks, as the tournament, sets etc. have just been created
+            AsyncContext.Run(() => tour.AddOrEditDataAsync(key, data[key]));
         }
 
+        Dictionary<int, Entrant> entrantDict = new();
         foreach (var entrant in entrants)
         {
-            tour.AddEntrant(entrant);
-            if (entrant is TeamEntrant entrant1)
+            AsyncContext.Run(() => tour.AddEntrantAsync(entrant));
+            entrantDict.Add(entrant.EntrantId, entrant);
+            if (entrant is TeamEntrant teamEntrant)
             {
-                foreach (IndividualEntrant iE in entrant1.IndividualEntrants)
+                foreach (IndividualEntrant iE in teamEntrant.IndividualEntrants)
                 {
-                    if (!tour.Entrants.TryGetValue(iE.EntrantId, out _))
+                    if (AsyncContext.Run(() => tour.TryGetEntrantAsync(iE.EntrantId)) is null)
                     {
-                        tour.AddEntrant(iE);
+                        AsyncContext.Run(() => tour.AddEntrantAsync(iE));
+                        entrantDict.Add(iE.EntrantId, iE);
                     }
                 }
             }
@@ -218,17 +217,17 @@ public class MyFormatConverter : JsonConverter<Tournament>
             {
                 throw new NullReferenceException();
             }
-            set.FillSetFromReport(sets, tour.Entrants, setReport);
+            set.FillSetFromReport(sets, entrantDict, setReport);
         }
         foreach (Set set in sets.Values)
         {
-            tour.AddSet(set);
+            AsyncContext.Run(() => tour.AddSetAsync(set));
         }
 
         tour.SetStatus(status);
-        if (tour.Status != Tournament.TournamentStatus.Setup)
+        if (AsyncContext.Run(() => tour.GetStatusAsync()) != Tournament.TournamentStatus.Setup)
         {
-            if (!tour.VerifyStructure())
+            if (!AsyncContext.Run(() => tour.VerifyStructureAsync()))
             {
                 throw new JsonException("Tournament structure of JSON being loaded is not valid.");
             }

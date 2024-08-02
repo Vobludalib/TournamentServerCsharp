@@ -1,10 +1,7 @@
 ///Countable
 
-using System.Diagnostics.CodeAnalysis;
-using System.Formats.Asn1;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Nito.AsyncEx;
 
 namespace TournamentSystem;
 
@@ -13,10 +10,17 @@ public class Tournament
     private Dictionary<int, Set> _sets { get; set; }
     private Dictionary<int, Entrant> _entrants { get; set; }
     private Dictionary<string, string> _data { get; set; }
-    private object _setLocker;
-    private object _entrantsLocker;
-    private object _dataLocker;
     private TournamentStatus _status;
+    private AsyncReaderWriterLock _setLocker;
+    private AsyncReaderWriterLock _entrantsLocker;
+    private AsyncReaderWriterLock _dataLocker;
+    private AsyncReaderWriterLock _statusLocker;
+
+    // ONLY TO BE USED IN SYNCHRONOUS CONTEXTS
+    public IReadOnlyDictionary<int, Set> Sets => _sets;
+    public IReadOnlyDictionary<int, Entrant> Entrants => _entrants;
+    public IReadOnlyDictionary<string, string> Data => _data;
+    public TournamentStatus Status => _status;
 
     public enum TournamentStatus
     {
@@ -24,11 +28,6 @@ public class Tournament
         InProgress,
         Finished
     }
-
-    public IReadOnlyDictionary<int, Set> Sets => _sets;
-    public IReadOnlyDictionary<int, Entrant> Entrants => _entrants;
-    public IReadOnlyDictionary<string, string> Data => _data;
-    public TournamentStatus Status => _status;
 
     public Tournament()
     {
@@ -39,6 +38,7 @@ public class Tournament
         _setLocker = new();
         _entrantsLocker = new();
         _dataLocker = new();
+        _statusLocker = new();
     }
 
     /// <summary>
@@ -46,23 +46,36 @@ public class Tournament
     /// Part of this method is verifying the structure of the tournament is valid.
     /// </summary>
     /// <returns></returns>
-    public bool TryMoveToInProgress()
+    public async Task<bool> TryMoveToInProgressAsync()
     {
-        if (_status != TournamentStatus.Setup)
-            return false;
-        if (VerifyStructure())
+        using (var disposable = await _statusLocker.ReaderLockAsync())
         {
-            _status = TournamentStatus.InProgress;
-            return true;
+            if (_status != TournamentStatus.Setup)
+                return false;
         }
-        return false;
+
+        using (var setsLock = await _setLocker.ReaderLockAsync())
+        using (var entrantsLock = await _entrantsLocker.ReaderLockAsync())
+        using (var statusLock = await _statusLocker.WriterLockAsync())
+        {
+            if (await VerifyStructureAsync())
+            {
+                _status = TournamentStatus.InProgress;
+                return true;
+            }
+            return false;
+        }
     }
 
-    public bool TryMoveToFinished()
+    public async Task<bool> TryMoveToFinishedAsync()
     {
-        if (_status != TournamentStatus.InProgress)
-            return false;
-        _status = TournamentStatus.Finished;
+        // Writer lock is exclusive, so we can also read safely
+        using (var disposable = await _statusLocker.WriterLockAsync())
+        {
+            if (_status != TournamentStatus.InProgress)
+                return false;
+            _status = TournamentStatus.Finished;
+        }
         return true;
     }
 
@@ -75,21 +88,20 @@ public class Tournament
         _status = status;
     }
 
-    internal bool VerifyStructure()
+    internal async Task<bool> VerifyStructureAsync()
     {
-        // Acquire locks of every set, along with locking sets and entrants dictionaries
+        // Acquire locks of every set, locking sets and entrants dictionaries and status should be already locked
+        var allSets = _sets.Values.ToList();
+        // Sorting by setId to guarantee consistent locking order
+        allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
+        List<IDisposable> setLocks = new();
+        foreach (Set set in allSets)
+        {
+            setLocks.Add(await set.GetLocker().ReaderLockAsync());
+        }
+
         try
         {
-            Monitor.Enter(_setLocker);
-            Monitor.Enter(_entrantsLocker);
-            var allSets = _sets.Values.ToList();
-            // Sorting by setId to guarantee consistent locking order
-            allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
-            foreach (Set set in allSets)
-            {
-                Monitor.Enter(set.GetLocker());
-            }
-
             // Verify each set has correct amount of entrants incoming/already in the set
             if (!VerifyAmountOfEntrants())
                 return false;
@@ -105,13 +117,10 @@ public class Tournament
         }
         finally
         {
-            Monitor.Exit(_setLocker);
-            Monitor.Exit(_entrantsLocker);
-            var allSets = _sets.Values.ToList();
-            allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
-            foreach (Set set in allSets)
+            // Unlock all the locks no matter what happens
+            foreach (IDisposable setLock in setLocks)
             {
-                Monitor.Exit(set.GetLocker());
+                setLock.Dispose();
             }
         }
     }
@@ -212,11 +221,15 @@ public class Tournament
     /// </summary>
     /// <param name="set"></param>
     /// <returns></returns>
-    public bool AddSet(Set set)
+    public async Task<bool> AddSetAsync(Set set)
     {
-        if (_status != TournamentStatus.Setup)
-            return false;
-        lock (_setLocker)
+        using (var disposable = await _statusLocker.ReaderLockAsync())
+        {
+            if (_status != TournamentStatus.Setup)
+                return false;
+        }
+
+        using (var disposable = await _setLocker.WriterLockAsync())
         {
             try
             {
@@ -235,11 +248,15 @@ public class Tournament
     /// </summary>
     /// <param name="id"></param>
     /// <returns></returns>
-    public bool TryRemoveSet(int id)
+    public async Task<bool> TryRemoveSetAsync(int id)
     {
-        if (_status != TournamentStatus.Setup)
-            return false;
-        lock (_setLocker)
+        using (var disposable = await _statusLocker.ReaderLockAsync())
+        {
+            if (_status != TournamentStatus.Setup)
+                return false;
+        }
+
+        using (var disposable = await _setLocker.WriterLockAsync())
         {
             if (_sets.ContainsKey(id))
             {
@@ -250,11 +267,26 @@ public class Tournament
         }
     }
 
-    public bool AddEntrant(Entrant entrant)
+    public async Task<Set?> TryGetSetAsync(int id)
     {
-        if (_status != TournamentStatus.Setup)
-            return false;
-        lock (_entrantsLocker)
+        using (var disposable = await _setLocker.ReaderLockAsync())
+        {
+            bool success = _sets.TryGetValue(id, out var set);
+            if (success)
+                return set;
+            return null;
+        }
+    }
+
+    public async Task<bool> AddEntrantAsync(Entrant entrant)
+    {
+        using (var disposable = await _statusLocker.ReaderLockAsync())
+        {
+            if (_status != TournamentStatus.Setup)
+                return false;
+        }
+
+        using (var disposable = await _entrantsLocker.WriterLockAsync())
         {
             try
             {
@@ -273,11 +305,14 @@ public class Tournament
     /// </summary>
     /// <param name="id"></param>
     /// <returns></returns>
-    public bool TryRemoveEntrant(int id)
+    public async Task<bool> TryRemoveEntrantAsync(int id)
     {
-        if (_status != TournamentStatus.Setup)
-            return false;
-        lock (_entrantsLocker)
+        using (var disposable = await _statusLocker.ReaderLockAsync())
+        {
+            if (_status != TournamentStatus.Setup)
+                return false;
+        }
+        using (var disposable = await _entrantsLocker.WriterLockAsync())
         {
             if (_entrants.ContainsKey(id))
             {
@@ -288,6 +323,17 @@ public class Tournament
         }
     }
 
+    public async Task<Entrant?> TryGetEntrantAsync(int id)
+    {
+        using (var disposable = await _entrantsLocker.ReaderLockAsync())
+        {
+            bool success = _entrants.TryGetValue(id, out var entrant);
+            if (success)
+                return entrant;
+            return null;
+        }
+    }
+
     /// <summary>
     /// Method for adding or editing a specific key value pair of Data. If the key does not yet exist, it is added, otherwise the existing value is just overwritten.
     /// Returns true on a success, otherwise false.
@@ -295,11 +341,15 @@ public class Tournament
     /// <param name="label"></param>
     /// <param name="value"></param>
     /// <returns></returns>
-    public bool AddOrEditData(string label, string value)
+    public async Task<bool> AddOrEditDataAsync(string label, string value)
     {
-        if (_status == TournamentStatus.Finished)
-            return false;
-        lock (_dataLocker)
+        using (var disposable = await _statusLocker.ReaderLockAsync())
+        {
+            if (_status == TournamentStatus.Finished)
+                return false;
+        }
+
+        using (var disposable = await _dataLocker.WriterLockAsync())
         {
             try
             {
@@ -323,11 +373,15 @@ public class Tournament
     /// </summary>
     /// <param name="label"></param>
     /// <returns></returns>
-    public bool DeleteData(string label)
+    public async Task<bool> DeleteDataAsync(string label)
     {
-        if (_status == TournamentStatus.Finished)
-            return false;
-        lock (_dataLocker)
+        using (var disposable = await _statusLocker.ReaderLockAsync())
+        {
+            if (_status == TournamentStatus.Finished)
+                return false;
+        }
+
+        using (var disposable = await _dataLocker.WriterLockAsync())
         {
             if (_data.ContainsKey(label))
             {
@@ -338,6 +392,25 @@ public class Tournament
             {
                 return false;
             }
+        }
+    }
+
+    public async Task<string?> TryGetDataAsync(string label)
+    {
+        using (var disposable = await _dataLocker.ReaderLockAsync())
+        {
+            bool success = _data.TryGetValue(label, out var value);
+            if (success)
+                return value;
+            return null;
+        }
+    }
+
+    public async Task<TournamentStatus> GetStatusAsync()
+    {
+        using (var disposable = await _statusLocker.ReaderLockAsync())
+        {
+            return _status;
         }
     }
 }
@@ -358,7 +431,7 @@ public class Set
     private List<Game> _games;
     private IWinnerDecider? _setDecider;
     private Dictionary<string, string> _data;
-    private object _locker;
+    private AsyncReaderWriterLock _locker;
 
     public int SetId
     {
@@ -796,7 +869,7 @@ public class Set
 
     // Only to be used for specific segments of code - you should not be locking it this way unless you have
     // a very good reason
-    internal object GetLocker() => _locker;
+    internal AsyncReaderWriterLock GetLocker() => _locker;
 
     public class Game
     {
