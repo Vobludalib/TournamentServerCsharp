@@ -400,6 +400,8 @@ public class SetConverter : JsonConverter<Set>
 
     public override void Write(Utf8JsonWriter writer, Set value, JsonSerializerOptions options)
     {
+        var newOptions = new JsonSerializerOptions(options);
+        if (options.Converters.Where(t1 => t1.GetType() == typeof(SetWinnerDeciderConverter)).Count() < 1) { newOptions.Converters.Add(new SetWinnerDeciderConverter()); }
         writer.WriteStartObject();
         foreach (var property in value.GetType().GetProperties())
         {
@@ -451,7 +453,7 @@ public class SetConverter : JsonConverter<Set>
                 else
                 { // TODO: Replace this with a reflection search for a more appropriate method before defaulting to this
                     // this includes changing how the serializer looks
-                    JsonSerializer.Serialize(writer, (Set.IWinnerDecider)sD, options);
+                    JsonSerializer.Serialize(writer, (Set.IWinnerDecider)sD, newOptions);
                 }
             }
             else
@@ -461,7 +463,7 @@ public class SetConverter : JsonConverter<Set>
                     writer,
                     propertyValue,
                     propertyValue?.GetType() ?? typeof(object),
-                    options
+                    newOptions
                 );
             }
         }

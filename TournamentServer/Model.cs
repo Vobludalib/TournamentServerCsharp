@@ -406,6 +406,22 @@ public class Tournament
         }
     }
 
+    public async Task<Dictionary<string, string>> GetAllDataAsync()
+    {
+        using (var disposable = await _dataLocker.ReaderLockAsync())
+        {
+            // We have to clone the dict and create a snapshot at the time, so we can free up the lock while ensuring the dict does not change after this method returns.
+            Dictionary<string, string> clonedDict = new();
+            // Not doing Parallel.Foreach, as every loop is really simple, and the overhead would be too large.
+            foreach (var key in _data.Keys)
+            {
+                // Strings are immutable, so we don't need to copy - these references will never change
+                clonedDict.Add(key, _data[key]);
+            }
+            return clonedDict;
+        }
+    }
+
     public async Task<TournamentStatus> GetStatusAsync()
     {
         using (var disposable = await _statusLocker.ReaderLockAsync())
