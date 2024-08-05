@@ -40,21 +40,31 @@ public class Tournament
 
         public async Task<Guid> LockSetsReadAsync()
         {
+            Console.WriteLine("Awaiting locking sets for read");
             IDisposable setLock = await _setLocker.ReaderLockAsync();
-            return AddLockToDictWithGuidKey(_setLocks, setLock);
+            var guid = AddLockToDictWithGuidKey(_setLocks, setLock);
+            Console.WriteLine($"Locked sets with lock {guid} for read");
+            return guid;
         }
 
         public async Task<Guid> LockSetsWriteAsync()
         {
+            Console.WriteLine("Awaiting locking sets for write");
             IDisposable setLock = await _setLocker.WriterLockAsync();
-            return AddLockToDictWithGuidKey(_setLocks, setLock);
+            var guid = AddLockToDictWithGuidKey(_setLocks, setLock);
+            Console.WriteLine($"Locked sets with lock {guid} for write");
+            return guid;
         }
 
         public void UnlockSetsLock(Guid lockGuid)
         {
-            if (!_setLocks.TryGetValue(lockGuid, out var lockToUnlock)) { throw new NullReferenceException(); }
+            if (!_setLocks.TryGetValue(lockGuid, out var lockToUnlock))
+            {
+                throw new NullReferenceException();
+            }
             lockToUnlock.Dispose();
             _setLocks.Remove(lockGuid);
+            Console.WriteLine($"Unlocked sets lock {lockGuid}");
         }
 
         public async Task<Guid> LockEntrantsReadAsync()
@@ -71,7 +81,10 @@ public class Tournament
 
         public void UnlockEntrantsLock(Guid lockGuid)
         {
-            if (!_entrantsLocks.TryGetValue(lockGuid, out var lockToUnlock)) { throw new NullReferenceException(); }
+            if (!_entrantsLocks.TryGetValue(lockGuid, out var lockToUnlock))
+            {
+                throw new NullReferenceException();
+            }
             lockToUnlock.Dispose();
             _entrantsLocks.Remove(lockGuid);
         }
@@ -90,7 +103,10 @@ public class Tournament
 
         public void UnlockDataLock(Guid lockGuid)
         {
-            if (!_dataLocks.TryGetValue(lockGuid, out var lockToUnlock)) { throw new NullReferenceException(); }
+            if (!_dataLocks.TryGetValue(lockGuid, out var lockToUnlock))
+            {
+                throw new NullReferenceException();
+            }
             lockToUnlock.Dispose();
             _dataLocks.Remove(lockGuid);
         }
@@ -109,12 +125,18 @@ public class Tournament
 
         public void UnlockStatusLock(Guid lockGuid)
         {
-            if (!_statusLocks.TryGetValue(lockGuid, out var lockToUnlock)) { throw new NullReferenceException(); }
+            if (!_statusLocks.TryGetValue(lockGuid, out var lockToUnlock))
+            {
+                throw new NullReferenceException();
+            }
             lockToUnlock.Dispose();
             _statusLocks.Remove(lockGuid);
         }
 
-        private Guid AddLockToDictWithGuidKey(Dictionary<Guid, IDisposable> locks, IDisposable lockDisposable)
+        private Guid AddLockToDictWithGuidKey(
+            Dictionary<Guid, IDisposable> locks,
+            IDisposable lockDisposable
+        )
         {
             Guid lockGuid = Guid.NewGuid();
             locks.Add(lockGuid, lockDisposable);
@@ -204,7 +226,7 @@ public class Tournament
         List<IDisposable> setLocks = new();
         foreach (Set set in allSets)
         {
-            setLocks.Add(await set.GetLocker().ReaderLockAsync());
+            setLocks.Add(await set.LockHandler.LockSetReadAsync());
         }
 
         try
@@ -224,6 +246,8 @@ public class Tournament
         }
         finally
         {
+            // Unlock in reverse order of locking
+            setLocks.Reverse();
             // Unlock all the locks no matter what happens
             foreach (IDisposable setLock in setLocks)
             {
@@ -333,8 +357,6 @@ public class Tournament
         var statusLock = await _lockHandler.LockStatusReadAsync();
         try
         {
-
-
             if (_status != TournamentStatus.Setup)
                 return false;
         }
@@ -382,7 +404,8 @@ public class Tournament
         {
             if (_sets.ContainsKey(id))
             {
-                _sets.Remove(id);
+                Set set = _sets[id];
+                set.FreeUpId(id);
                 return true;
             }
             return false;
@@ -461,6 +484,8 @@ public class Tournament
         {
             if (_entrants.ContainsKey(id))
             {
+                Entrant entrant = _entrants[id];
+                entrant.FreeUpId(entrant.EntrantId);
                 _entrants.Remove(id);
                 return true;
             }
@@ -595,7 +620,6 @@ public class Tournament
         }
         _lockHandler.UnlockDataLock(dataLock);
         return clonedDict;
-
     }
 
     public async Task<TournamentStatus> GetStatusAsync()
@@ -614,7 +638,7 @@ public class Tournament
 
 public class Set
 {
-    private static List<Set> _sets = new List<Set>();
+    private static List<int> _setIds = new List<int>();
 
     private int _setId;
     private string? _setName;
@@ -628,7 +652,7 @@ public class Set
     private List<Game> _games;
     private IWinnerDecider? _setDecider;
     private Dictionary<string, string> _data;
-    private AsyncReaderWriterLock _locker;
+    private SetLockHandler _lockHandler;
 
     public int SetId
     {
@@ -640,7 +664,7 @@ public class Set
         get => _setName;
         set
         {
-            lock (_locker)
+            using (_lockHandler.LockSetWrite())
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
@@ -656,7 +680,7 @@ public class Set
         get => _entrant1;
         set
         {
-            lock (_locker)
+            using (_lockHandler.LockSetWrite())
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
@@ -672,7 +696,7 @@ public class Set
         get => _entrant2;
         set
         {
-            lock (_locker)
+            using (_lockHandler.LockSetWrite())
             {
                 if (_status != SetStatus.IncompleteSetup)
                     throw new InvalidOperationException("Cannot change entrants after set setup.");
@@ -692,7 +716,7 @@ public class Set
         get => _setWinnerGoesTo;
         set
         {
-            lock (_locker)
+            using (_lockHandler.LockSetWrite())
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
@@ -710,7 +734,7 @@ public class Set
         get => _setLoserGoesTo;
         set
         {
-            lock (_locker)
+            using (_lockHandler.LockSetWrite())
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
@@ -743,7 +767,7 @@ public class Set
         get => _setDecider;
         set
         {
-            lock (_locker)
+            using (_lockHandler.LockSetWrite())
             {
                 if (_status != SetStatus.IncompleteSetup)
                 {
@@ -761,7 +785,7 @@ public class Set
         get => _data;
         set
         {
-            lock (_locker)
+            using (_lockHandler.LockSetWrite())
             {
                 _data = value;
             }
@@ -776,17 +800,55 @@ public class Set
         Finished
     }
 
+    public SetLockHandler LockHandler => _lockHandler;
+
+    public class SetLockHandler
+    {
+        private AsyncReaderWriterLock _setLocker = new();
+
+        public async Task<IDisposable> LockSetReadAsync()
+        {
+            Console.WriteLine("Awaiting locking set for read");
+            IDisposable setLock = await _setLocker.ReaderLockAsync();
+            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for read");
+            return setLock;
+        }
+
+        public async Task<IDisposable> LockSetWriteAsync()
+        {
+            Console.WriteLine("Awaiting locking set for write");
+            IDisposable setLock = await _setLocker.WriterLockAsync();
+            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for write");
+            return setLock;
+        }
+
+        // Only to be used in synchronous contexts
+        public IDisposable LockSetRead()
+        {
+            IDisposable setLock = _setLocker.ReaderLock();
+            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for read");
+            return setLock;
+        }
+
+        public IDisposable LockSetWrite()
+        {
+            IDisposable setLock = _setLocker.WriterLock();
+            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for write");
+            return setLock;
+        }
+    }
+
     // I only have a constructor with only ID, as the fields will be set later. This is because
     // of the order in which a tournament must be reconstructed from JSON, but also
     // because these fields will change inherently as a tournament progresses. An entrant on the other
     // hand should not change once it is created, as it is immutable.
-    public Set(int id)
+    public Set(int Id)
     {
-        if (_sets is null)
-            _sets = new List<Set>();
-        foreach (var set in _sets)
+        if (_setIds is null)
+            _setIds = new List<int>();
+        foreach (var setId in _setIds)
         {
-            if (set._setId == id)
+            if (setId == Id)
             {
                 throw new InvalidOperationException(
                     "Attempting to create a set with an already existing Id"
@@ -795,13 +857,13 @@ public class Set
         }
 
         _data = new Dictionary<string, string>();
-        _setId = id;
+        _setId = Id;
         _status = SetStatus.IncompleteSetup;
         _games = new List<Game>();
 
-        _sets.Add(this);
+        _setIds.Add(Id);
 
-        _locker = new();
+        _lockHandler = new();
     }
 
     /// <summary>
@@ -868,6 +930,16 @@ public class Set
 
             throw new NotImplementedException("Other alternative states not handled currently");
         }
+    }
+
+    public bool FreeUpId(int Id)
+    {
+        if (_setIds is null)
+            throw new NullReferenceException();
+        var amountRemoved = _setIds.RemoveAll(x => x == Id);
+        if (amountRemoved > 0)
+            return true;
+        return false;
     }
 
     /// <summary>
@@ -937,7 +1009,7 @@ public class Set
     /// <exception cref="NullReferenceException"></exception>
     public bool UpdateSetBasedOnGames()
     {
-        lock (_locker)
+        using (_lockHandler.LockSetWrite())
         {
             if (_status != SetStatus.InProgress)
             {
@@ -984,7 +1056,7 @@ public class Set
     /// <returns></returns>
     public bool TryMoveToInProgress()
     {
-        lock (_locker)
+        using (_lockHandler.LockSetWrite())
         {
             if (_status != SetStatus.WaitingForStart)
                 return false;
@@ -999,7 +1071,7 @@ public class Set
     /// <returns></returns>
     public bool TryMoveToWaitingForStart()
     {
-        lock (_locker)
+        using (_lockHandler.LockSetWrite())
         {
             if (_status != SetStatus.IncompleteSetup)
                 return false;
@@ -1016,7 +1088,7 @@ public class Set
     /// <returns></returns>
     public bool TryProgressingWinnerAndLoser()
     {
-        lock (_locker)
+        using (_lockHandler.LockSetWrite())
         {
             if (_status != SetStatus.Finished)
                 return false;
@@ -1024,7 +1096,7 @@ public class Set
                 return false;
             if (_setWinnerGoesTo is not null)
             {
-                lock (_setWinnerGoesTo._locker)
+                using (_setWinnerGoesTo._lockHandler.LockSetWrite())
                 {
                     if (_setWinnerGoesTo._entrant1 is null)
                         _setWinnerGoesTo._entrant1 = _winner;
@@ -1043,7 +1115,7 @@ public class Set
             }
             if (_setLoserGoesTo is not null)
             {
-                lock (_setLoserGoesTo._locker)
+                using (_setLoserGoesTo._lockHandler.LockSetWrite())
                 {
                     if (_setLoserGoesTo._entrant1 is not null)
                         _setLoserGoesTo._entrant1 = _loser;
@@ -1063,10 +1135,6 @@ public class Set
             return true;
         }
     }
-
-    // Only to be used for specific segments of code - you should not be locking it this way unless you have
-    // a very good reason
-    internal AsyncReaderWriterLock GetLocker() => _locker;
 
     public class Game
     {
@@ -1157,7 +1225,7 @@ public class Set
         public void SetWinner(Entrant winner)
         {
             // Locking set locker first, so no one can change set (such as removing this game from the set), while we are doing something
-            lock (_parentSet._locker)
+            using (_parentSet._lockHandler.LockSetWrite())
             {
                 lock (_locker)
                 {
@@ -1180,9 +1248,9 @@ public class Set
     }
 }
 
-public abstract record class Entrant
+public abstract class Entrant
 {
-    protected static List<Entrant>? _entrants;
+    protected static List<int>? _entrantIds;
     public int EntrantId { get; init; }
 
     // This is a dictionary, as we don't have a set promise from the JSON as to what information
@@ -1190,9 +1258,19 @@ public abstract record class Entrant
     // when required
     protected Dictionary<string, string> _entrantData = new Dictionary<string, string>();
     public Dictionary<string, string> EntrantData => _entrantData;
+
+    public bool FreeUpId(int Id)
+    {
+        if (_entrantIds is null)
+            throw new NullReferenceException();
+        var amountRemoved = _entrantIds.RemoveAll(x => x == Id);
+        if (amountRemoved > 0)
+            return true;
+        return false;
+    }
 }
 
-public record class IndividualEntrant : Entrant
+public class IndividualEntrant : Entrant
 {
     // This is kept as an EntrantName type - this is because I allow the JSON to specify the info
     // firstName, lastName if you want to store them seperately, or just tag for a single string.
@@ -1249,11 +1327,11 @@ public record class IndividualEntrant : Entrant
 
     public IndividualEntrant(int Id, string Tag, Dictionary<string, string>? data = null)
     {
-        if (_entrants is null)
-            _entrants = new List<Entrant>();
-        foreach (var entrant in _entrants)
+        if (_entrantIds is null)
+            _entrantIds = new();
+        foreach (int entrantId in _entrantIds)
         {
-            if (entrant.EntrantId == Id)
+            if (entrantId == Id)
             {
                 throw new InvalidOperationException(
                     "Attempting to create an entrant with an already existing Id"
@@ -1270,7 +1348,7 @@ public record class IndividualEntrant : Entrant
         }
         _entrantData = data;
 
-        _entrants.Add(this);
+        _entrantIds.Add(Id);
     }
 
     public IndividualEntrant(
@@ -1280,11 +1358,11 @@ public record class IndividualEntrant : Entrant
         Dictionary<string, string>? data = null
     )
     {
-        if (_entrants is null)
-            _entrants = new List<Entrant>();
-        foreach (var entrant in _entrants)
+        if (_entrantIds is null)
+            _entrantIds = new();
+        foreach (int entrantId in _entrantIds)
         {
-            if (entrant.EntrantId == Id)
+            if (entrantId == Id)
             {
                 throw new InvalidOperationException(
                     "Attempting to create an entrant with an already existing Id"
@@ -1301,11 +1379,11 @@ public record class IndividualEntrant : Entrant
         }
         _entrantData = data;
 
-        _entrants.Add(this);
+        _entrantIds.Add(Id);
     }
 }
 
-public record class TeamEntrant : Entrant
+public class TeamEntrant : Entrant
 {
     public List<IndividualEntrant> IndividualEntrants { get; init; }
     public string? TeamName { get; init; }
