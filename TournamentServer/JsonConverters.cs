@@ -26,7 +26,7 @@ namespace TournamentSystem;
 
 public class MyFormatConverter : JsonConverter<Tournament>
 {
-    internal record class SetLinksReport
+    public record class SetLinksReport
     {
         public int SetId { get; set; }
         public int? Entrant1Id { get; set; }
@@ -42,7 +42,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
         public Dictionary<string, string>? Data { get; set; }
     }
 
-    internal record class GameLinksReport
+    public record class GameLinksReport
     {
         public int GameNumber { get; set; }
         public int? Entrant1Id { get; set; }
@@ -101,18 +101,16 @@ public class MyFormatConverter : JsonConverter<Tournament>
                 case JsonTokenType.PropertyName:
                     if (reader.GetString() == "sets")
                     {
-                        SetConverter sc = new();
+                        SetLinksConverter sc = new();
                         // Convert all the sets, and link them correctly
                         // We have to do it in this weird way, Set1 may reference Set2, which has not been created yet
                         reader.Read(); // Read the StartArray
                         reader.Read(); // Read the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            SetLinksReport report = sc.ReadIntoLinksReport(
-                                ref reader,
-                                typeof(Set),
-                                jsonSettings
-                            );
+                            SetLinksReport report =
+                                sc.Read(ref reader, typeof(Set), jsonSettings)
+                                ?? throw new JsonException();
                             setsToLink.Add(report);
                             while (
                                 reader.TokenType != JsonTokenType.StartObject
@@ -300,18 +298,9 @@ public class MyFormatConverter : JsonConverter<Tournament>
     }
 }
 
-public class SetConverter : JsonConverter<Set>
+public class SetLinksConverter : JsonConverter<MyFormatConverter.SetLinksReport>
 {
-    public override Set? Read(
-        ref Utf8JsonReader reader,
-        Type typeToConvert,
-        JsonSerializerOptions options
-    )
-    {
-        return (Set?)JsonSerializer.Deserialize(ref reader, typeof(Set), options);
-    }
-
-    internal MyFormatConverter.SetLinksReport ReadIntoLinksReport(
+    public override MyFormatConverter.SetLinksReport? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
         JsonSerializerOptions options
@@ -361,18 +350,18 @@ public class SetConverter : JsonConverter<Set>
                         report.Loser = MyFormatConverter.GetNumberOrNull(ref reader);
                         break;
                     case "games":
-                        var gc = new GameConverter();
+                        var gc = new GameLinksConverter();
                         report.Games = new List<MyFormatConverter.GameLinksReport>();
                         reader.Read(); // Read to get to the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            MyFormatConverter.GameLinksReport gameReport = gc.ReadIntoLinksReport(
-                                ref reader,
-                                typeof(Set.Game),
-                                options
-                            );
+                            MyFormatConverter.GameLinksReport gameReport =
+                                gc.Read(
+                                    ref reader,
+                                    typeof(MyFormatConverter.GameLinksReport),
+                                    options
+                                ) ?? throw new JsonException();
                             report.Games.Add(gameReport);
-                            reader.Read();
                         }
                         break;
                     case "setDecider":
@@ -398,10 +387,39 @@ public class SetConverter : JsonConverter<Set>
         return report;
     }
 
+    public override void Write(
+        Utf8JsonWriter writer,
+        MyFormatConverter.SetLinksReport value,
+        JsonSerializerOptions options
+    )
+    {
+        throw new NotImplementedException();
+    }
+}
+
+public class SetConverter : JsonConverter<Set>
+{
+    public override Set? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
+    {
+        return (Set?)JsonSerializer.Deserialize(ref reader, typeof(Set), options);
+    }
+
     public override void Write(Utf8JsonWriter writer, Set value, JsonSerializerOptions options)
     {
         var newOptions = new JsonSerializerOptions(options);
-        if (options.Converters.Where(t1 => t1.GetType() == typeof(SetWinnerDeciderConverter)).Count() < 1) { newOptions.Converters.Add(new SetWinnerDeciderConverter()); }
+        if (
+            options
+                .Converters
+                .Where(t1 => t1.GetType() == typeof(SetWinnerDeciderConverter))
+                .Count() < 1
+        )
+        {
+            newOptions.Converters.Add(new SetWinnerDeciderConverter());
+        }
         writer.WriteStartObject();
         foreach (var property in value.GetType().GetProperties())
         {
@@ -547,18 +565,9 @@ public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
     }
 }
 
-public class GameConverter : JsonConverter<Set.Game>
+public class GameLinksConverter : JsonConverter<MyFormatConverter.GameLinksReport>
 {
-    public override Set.Game? Read(
-        ref Utf8JsonReader reader,
-        Type typeToConvert,
-        JsonSerializerOptions options
-    )
-    {
-        throw new NotImplementedException();
-    }
-
-    internal MyFormatConverter.GameLinksReport ReadIntoLinksReport(
+    public override MyFormatConverter.GameLinksReport? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
         JsonSerializerOptions options
@@ -615,7 +624,29 @@ public class GameConverter : JsonConverter<Set.Game>
         {
             reader.Read();
         }
+        reader.Read();
         return report;
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer,
+        MyFormatConverter.GameLinksReport value,
+        JsonSerializerOptions options
+    )
+    {
+        throw new NotImplementedException();
+    }
+}
+
+public class GameConverter : JsonConverter<Set.Game>
+{
+    public override Set.Game? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
+    {
+        throw new NotImplementedException();
     }
 
     public override void Write(Utf8JsonWriter writer, Set.Game value, JsonSerializerOptions options)
@@ -624,7 +655,7 @@ public class GameConverter : JsonConverter<Set.Game>
         foreach (var property in value.GetType().GetProperties())
         {
             writer.WritePropertyName(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
-            if (property.Name.Contains("Entrant"))
+            if (property.Name.Contains("Entrant") || property.Name.Contains("Winner"))
             {
                 if (property.GetValue(value) != null)
                 {

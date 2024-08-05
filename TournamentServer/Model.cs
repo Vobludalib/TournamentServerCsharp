@@ -368,6 +368,8 @@ public class Tournament
         var setLock = await _lockHandler.LockSetsWriteAsync();
         try
         {
+            if (_sets.Keys.Contains(set.SetId))
+                return false;
             _sets.Add(set.SetId, set);
             return true;
         }
@@ -404,8 +406,7 @@ public class Tournament
         {
             if (_sets.ContainsKey(id))
             {
-                Set set = _sets[id];
-                set.FreeUpId(id);
+                _sets.Remove(id);
                 return true;
             }
             return false;
@@ -448,6 +449,8 @@ public class Tournament
         var entrantsLock = await _lockHandler.LockEntrantsReadAsync();
         try
         {
+            if (_entrants.Keys.Contains(entrant.EntrantId))
+                return false;
             _entrants.Add(entrant.EntrantId, entrant);
             return true;
         }
@@ -484,8 +487,6 @@ public class Tournament
         {
             if (_entrants.ContainsKey(id))
             {
-                Entrant entrant = _entrants[id];
-                entrant.FreeUpId(entrant.EntrantId);
                 _entrants.Remove(id);
                 return true;
             }
@@ -638,8 +639,6 @@ public class Tournament
 
 public class Set
 {
-    private static List<int> _setIds = new List<int>();
-
     private int _setId;
     private string? _setName;
     private Entrant? _entrant1;
@@ -844,25 +843,10 @@ public class Set
     // hand should not change once it is created, as it is immutable.
     public Set(int Id)
     {
-        if (_setIds is null)
-            _setIds = new List<int>();
-        foreach (var setId in _setIds)
-        {
-            if (setId == Id)
-            {
-                throw new InvalidOperationException(
-                    "Attempting to create a set with an already existing Id"
-                );
-            }
-        }
-
         _data = new Dictionary<string, string>();
         _setId = Id;
         _status = SetStatus.IncompleteSetup;
         _games = new List<Game>();
-
-        _setIds.Add(Id);
-
         _lockHandler = new();
     }
 
@@ -930,16 +914,6 @@ public class Set
 
             throw new NotImplementedException("Other alternative states not handled currently");
         }
-    }
-
-    public bool FreeUpId(int Id)
-    {
-        if (_setIds is null)
-            throw new NullReferenceException();
-        var amountRemoved = _setIds.RemoveAll(x => x == Id);
-        if (amountRemoved > 0)
-            return true;
-        return false;
     }
 
     /// <summary>
@@ -1188,6 +1162,29 @@ public class Set
             _locker = new();
         }
 
+        // Used when deserializing a game
+        internal Game(
+            Set ParentSet,
+            int GameNumber,
+            Entrant Entrant1,
+            Entrant Entrant2,
+            Entrant? Winner,
+            GameStatus Status,
+            Dictionary<string, string>? Data = null
+        )
+        {
+            _parentSet = ParentSet;
+            _gameNumber = GameNumber;
+            _entrant1 = Entrant1;
+            _entrant2 = Entrant2;
+            _gameWinner = Winner;
+            if (Data is null)
+                _data = new Dictionary<string, string>();
+            _data = Data!;
+            _status = Status;
+            _locker = new();
+        }
+
         /// <summary>
         /// Method to move from InProgress to Waiting - should only be used to roll-back misclicks. Returns true if succesful, otherwise false.
         /// </summary>
@@ -1250,7 +1247,6 @@ public class Set
 
 public abstract class Entrant
 {
-    protected static List<int>? _entrantIds;
     public int EntrantId { get; init; }
 
     // This is a dictionary, as we don't have a set promise from the JSON as to what information
@@ -1258,16 +1254,6 @@ public abstract class Entrant
     // when required
     protected Dictionary<string, string> _entrantData = new Dictionary<string, string>();
     public Dictionary<string, string> EntrantData => _entrantData;
-
-    public bool FreeUpId(int Id)
-    {
-        if (_entrantIds is null)
-            throw new NullReferenceException();
-        var amountRemoved = _entrantIds.RemoveAll(x => x == Id);
-        if (amountRemoved > 0)
-            return true;
-        return false;
-    }
 }
 
 public class IndividualEntrant : Entrant
@@ -1327,18 +1313,6 @@ public class IndividualEntrant : Entrant
 
     public IndividualEntrant(int Id, string Tag, Dictionary<string, string>? data = null)
     {
-        if (_entrantIds is null)
-            _entrantIds = new();
-        foreach (int entrantId in _entrantIds)
-        {
-            if (entrantId == Id)
-            {
-                throw new InvalidOperationException(
-                    "Attempting to create an entrant with an already existing Id"
-                );
-            }
-        }
-
         EntrantId = Id;
         EntrantName = new Tag(Tag);
 
@@ -1347,8 +1321,6 @@ public class IndividualEntrant : Entrant
             data = new Dictionary<string, string>();
         }
         _entrantData = data;
-
-        _entrantIds.Add(Id);
     }
 
     public IndividualEntrant(
@@ -1358,18 +1330,6 @@ public class IndividualEntrant : Entrant
         Dictionary<string, string>? data = null
     )
     {
-        if (_entrantIds is null)
-            _entrantIds = new();
-        foreach (int entrantId in _entrantIds)
-        {
-            if (entrantId == Id)
-            {
-                throw new InvalidOperationException(
-                    "Attempting to create an entrant with an already existing Id"
-                );
-            }
-        }
-
         EntrantId = Id;
         EntrantName = new FullName(FirstName, LastName);
 
@@ -1378,8 +1338,6 @@ public class IndividualEntrant : Entrant
             data = new Dictionary<string, string>();
         }
         _entrantData = data;
-
-        _entrantIds.Add(Id);
     }
 }
 

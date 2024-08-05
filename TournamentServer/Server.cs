@@ -27,6 +27,14 @@ class TournamentServer()
         app.MapGet("/data", () => sh.GetAllDataAsync());
         app.MapGet("/data/{key}", (string key) => sh.GetDataByKeyAsync(key));
         app.MapGet("/status", () => sh.GetStatusAsync());
+        app.MapPost(
+            "/tournament/transitionTo/{status}",
+            (string status) => sh.HandleTournamentStatusTransition(status)
+        );
+        app.MapPost(
+            "/set/{id}/addGame",
+            (int id, HttpContext context) => sh.HandleGamePost(id, context)
+        );
 
         //First clarg is path to JSON to load - if nothing is passed, the no JSON is read
 
@@ -83,6 +91,8 @@ class TournamentServer()
         public MyFormatConverter myFormatConverter;
         public SetConverter setConverter;
         public EntrantConverter entrantConverter;
+        public GameConverter gameConverter;
+        public GameLinksConverter gameLinksConverter;
         public Tournament? tournament;
 
         public ServerHandler()
@@ -90,6 +100,8 @@ class TournamentServer()
             myFormatConverter = new();
             setConverter = new();
             entrantConverter = new();
+            gameConverter = new();
+            gameLinksConverter = new();
         }
 
         public async Task<IResult> GetTournamentAsync()
@@ -247,9 +259,134 @@ class TournamentServer()
                     return Results.BadRequest("Request has no body");
                 }
                 Tournament newTournament =
-                    JsonSerializer.Deserialize<Tournament>(jsonBody, new JsonSerializerOptions() { Converters = { myFormatConverter } }) ?? throw new JsonException();
+                    JsonSerializer.Deserialize<Tournament>(
+                        jsonBody,
+                        new JsonSerializerOptions() { Converters = { myFormatConverter } }
+                    ) ?? throw new JsonException();
                 tournament = newTournament;
                 return Results.Ok("Tournament successfully loaded");
+            }
+        }
+
+        public async Task<IResult> HandleTournamentStatusTransition(string transitionTo)
+        {
+            if (tournament is null)
+            {
+                return Results.BadRequest("No tournament exists");
+            }
+            switch (transitionTo)
+            {
+                case "InProgress":
+                    var result = await tournament.TryMoveToInProgressAsync();
+                    if (result)
+                    {
+                        return Results.Ok("Moved to InProgress");
+                    }
+                    return Results.Problem(
+                        "Failed to move to InProgress. Check that tournament structure is valid and the tournament status is Setup."
+                    );
+                case "Finished":
+                    result = await tournament.TryMoveToFinishedAsync();
+                    if (result)
+                    {
+                        return Results.Ok("Moved to Finished");
+                    }
+                    return Results.Problem(
+                        "Failed to move to Finished. Check that the tournament status is InProgress."
+                    );
+                default:
+                    return Results.BadRequest($"Invalid state to transition to {transitionTo}.");
+            }
+        }
+
+        public async Task<IResult> HandleGamePost(int setId, HttpContext context)
+        {
+            if (tournament is null)
+            {
+                return Results.BadRequest("No tournament exists");
+            }
+            using (StreamReader reader = new StreamReader(context.Request.Body, Encoding.UTF8))
+            {
+                string jsonBody = await reader.ReadToEndAsync();
+                if (jsonBody is null)
+                {
+                    return Results.BadRequest("Request has no body");
+                }
+                Console.WriteLine(jsonBody);
+                MyFormatConverter.GameLinksReport? glr =
+                    JsonSerializer.Deserialize<MyFormatConverter.GameLinksReport>(
+                        jsonBody,
+                        new JsonSerializerOptions() { Converters = { gameLinksConverter } }
+                    );
+                if (glr is null)
+                    return Results.BadRequest("Failed to deserialize game");
+
+                var setsLock = await tournament.LockHandler.LockSetsReadAsync();
+                try
+                {
+                    var setToTieTo = await tournament.TryGetSetAsync(setId);
+                    if (setToTieTo is null)
+                        return Results.BadRequest("Set game is being added to does not exist");
+
+                    using (await setToTieTo.LockHandler.LockSetWriteAsync())
+                    {
+                        var entrant1 = await tournament.TryGetEntrantAsync((int)glr.Entrant1Id!);
+                        var entrant2 = await tournament.TryGetEntrantAsync((int)glr.Entrant2Id!);
+
+                        if (entrant1 is null || entrant2 is null)
+                            return Results.BadRequest("One of the entrants is null");
+
+                        Entrant? winner = null;
+                        if (entrant1.EntrantId == glr.GameWinnerId) winner = entrant1;
+                        else if (entrant2.EntrantId == glr.GameWinnerId) winner = entrant2;
+
+                        Set.Game game = new Set.Game(
+                            setToTieTo,
+                            glr.GameNumber,
+                            entrant1,
+                            entrant2,
+                            winner,
+                            (Set.Game.GameStatus)glr.Status!,
+                            glr.Data
+                        );
+
+                        var amountOfMatchingSets = setToTieTo
+                            .Games
+                            .Where(x => x.GameNumber == game.GameNumber)
+                            .Count();
+
+                        if (amountOfMatchingSets == 1)
+                        {
+                            var gameToReplace = setToTieTo
+                                .Games
+                                .Where(x => x.GameNumber == game.GameNumber)
+                                .First();
+                            var index = setToTieTo.Games.IndexOf(gameToReplace);
+                            setToTieTo.Games[index] = game;
+                            return Results.Ok(
+                                $"Replaced an already existing game with the same game number for set {setId}"
+                            );
+                        }
+                        else if (amountOfMatchingSets == 0)
+                        {
+                            // Get highest gameNumber already existing, the game we want to create has to be the subsequent game number
+                            if ( setToTieTo.Games.Count == 0 && game.GameNumber != 1 ) return Results.BadRequest("First game must have gameNumber set to 1.");
+                            else if (setToTieTo.Games.Count > 0 && glr.GameNumber != setToTieTo.Games.Max(x => x.GameNumber) + 1)
+                            {
+                                return Results.BadRequest(
+                                    "GameNumber is not the directly subsequent game for the given set."
+                                );
+                            }
+                            setToTieTo.Games.Add(game);
+                            return Results.Ok("Game added to set");
+                        }
+                        return Results.BadRequest();
+                    }
+                }
+                finally
+                {
+                    tournament.LockHandler.UnlockSetsLock(setsLock);
+                }
             }
         }
     }
