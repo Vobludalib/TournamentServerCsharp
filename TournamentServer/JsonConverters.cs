@@ -446,7 +446,11 @@ public class SetConverter : JsonConverter<Set>
                     writer.WriteNullValue();
                 }
             }
-            else if (property.Name.Contains("Entrant"))
+            else if (
+                property.Name.Contains("Entrant")
+                || property.Name == "Winner"
+                || property.Name == "Loser"
+            )
             {
                 if (property.GetValue(value) != null)
                 {

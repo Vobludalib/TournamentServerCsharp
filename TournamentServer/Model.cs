@@ -879,7 +879,7 @@ public class Set
             int entrant2Wins = 0;
             foreach (Game game in games)
             {
-                if (game.GameWinner is null)
+                if (game.GameWinner is null || game.Status != Game.GameStatus.Finished)
                     continue;
                 else if (game.GameWinner.EntrantId == entrant1.EntrantId)
                     entrant1Wins += 1;
@@ -978,136 +978,116 @@ public class Set
     /// <summary>
     /// If a set is InProgress, this method will evaluate whether the games are enough to decide a winner
     /// using the provided IWinnerDecider. If a winner is found, Status is set to Finished.
+    ///
+    /// This method assumes that the set it is working with is appropriately locked already.
     /// </summary>
     /// <returns></returns>
     /// <exception cref="NullReferenceException"></exception>
     public bool UpdateSetBasedOnGames()
     {
-        using (_lockHandler.LockSetWrite())
+        if (_status != SetStatus.InProgress)
         {
-            if (_status != SetStatus.InProgress)
-            {
-                // If the game is not currently in progress, we should not even look at the games
-                return false;
-            }
-            if (_setDecider is null)
-            {
-                throw new NullReferenceException("Set is InProgress without a SetDecider set.");
-            }
-            if (_entrant1 is null || _entrant2 is null)
-            {
-                throw new NullReferenceException("Set is InProgress without both entrants set.");
-            }
-            Entrant? winner = _setDecider.DecideWinner(_entrant1, _entrant2, Games);
-            // If no winner, we return false.
-            if (winner is null)
-                return false;
-            // Otherwise, we set the appropriate winner and loser properties
-            // We do not move players to their next set in this step, that is handled elsewhere
-            // there may be cases where we wish for these properties to be filled, but not do anything with them yet
-            if (winner == _entrant1)
-            {
-                _winner = _entrant1;
-                _loser = _entrant2;
-            }
-            else if (winner == _entrant2)
-            {
-                _winner = _entrant2;
-                _loser = _entrant1;
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
-            _status = SetStatus.Finished;
-            return true;
+            // If the game is not currently in progress, we should not even look at the games
+            return false;
         }
-    }
-
-    /// <summary>
-    /// Method that tries to move Set to InProgress, if conditions are satisfied (returns true). Otherwise, returns false.
-    /// </summary>
-    /// <returns></returns>
-    public bool TryMoveToInProgress()
-    {
-        using (_lockHandler.LockSetWrite())
+        if (_setDecider is null)
         {
-            if (_status != SetStatus.WaitingForStart)
-                return false;
-            _status = SetStatus.InProgress;
-            return true;
+            throw new NullReferenceException("Set is InProgress without a SetDecider set.");
         }
+        if (_entrant1 is null || _entrant2 is null)
+        {
+            throw new NullReferenceException("Set is InProgress without both entrants set.");
+        }
+        Entrant? winner = _setDecider.DecideWinner(_entrant1, _entrant2, Games);
+        // If no winner, we return false.
+        if (winner is null)
+            return false;
+        // Otherwise, we set the appropriate winner and loser properties
+        // We do not move players to their next set in this step, that is handled elsewhere
+        // there may be cases where we wish for these properties to be filled, but not do anything with them yet
+        if (winner == _entrant1)
+        {
+            _winner = _entrant1;
+            _loser = _entrant2;
+        }
+        else if (winner == _entrant2)
+        {
+            _winner = _entrant2;
+            _loser = _entrant1;
+        }
+        else
+        {
+            throw new NotImplementedException();
+        }
+        _status = SetStatus.Finished;
+        return true;
     }
 
     /// <summary>
     /// Method that tries to move Set to WaitingForStart, if all entrants and the winnerDecider are set (and we are in a valid state)
+    ///
+    /// This method assumes that the set it is working with is appropriately locked already.
     /// </summary>
     /// <returns></returns>
     public bool TryMoveToWaitingForStart()
     {
-        using (_lockHandler.LockSetWrite())
-        {
-            if (_status != SetStatus.IncompleteSetup)
-                return false;
-            if (_entrant1 is null || _entrant2 is null || _setDecider is null)
-                return false;
-            _status = SetStatus.WaitingForStart;
-            return true;
-        }
+        if (_status != SetStatus.IncompleteSetup)
+            return false;
+        if (_entrant1 is null || _entrant2 is null || _setDecider is null)
+            return false;
+        _status = SetStatus.WaitingForStart;
+        return true;
+    }
+
+    /// <summary>
+    /// Method that tries to move Set to InProgress, if conditions are satisfied (returns true). Otherwise, returns false.
+    ///
+    /// This method assumes that the set it is working with is appropriately locked already.
+    /// </summary>
+    /// <returns></returns>
+    public bool TryMoveToInProgress()
+    {
+        if (_status != SetStatus.WaitingForStart)
+            return false;
+        _status = SetStatus.InProgress;
+        return true;
     }
 
     /// <summary>
     /// Method for moving winner and loser to the sets they play in next (if any). Returns true on success, false otherwise.
+    ///
+    /// This method assumes that the set it is working with is appropriately locked already.
     /// </summary>
     /// <returns></returns>
     public bool TryProgressingWinnerAndLoser()
     {
-        using (_lockHandler.LockSetWrite())
+        if (_status != SetStatus.Finished)
+            return false;
+        if (_winner is null || _loser is null)
+            return false;
+        if (_setWinnerGoesTo is not null)
         {
-            if (_status != SetStatus.Finished)
-                return false;
-            if (_winner is null || _loser is null)
-                return false;
-            if (_setWinnerGoesTo is not null)
+            if (_setWinnerGoesTo._entrant1 is null)
+                _setWinnerGoesTo._entrant1 = _winner;
+            else if (_setWinnerGoesTo._entrant2 is null)
+                _setWinnerGoesTo._entrant2 = _winner;
+            else if (_setWinnerGoesTo._entrant1 != _winner && _setWinnerGoesTo._entrant2 != _winner)
             {
-                using (_setWinnerGoesTo._lockHandler.LockSetWrite())
-                {
-                    if (_setWinnerGoesTo._entrant1 is null)
-                        _setWinnerGoesTo._entrant1 = _winner;
-                    else if (_setWinnerGoesTo._entrant2 is null)
-                        _setWinnerGoesTo._entrant2 = _winner;
-                    else if (
-                        _setWinnerGoesTo._entrant1 != _winner
-                        && _setWinnerGoesTo._entrant2 != _winner
-                    )
-                    {
-                        throw new InvalidOperationException(
-                            "Moving an entrant to an already filled set"
-                        );
-                    }
-                }
+                throw new InvalidOperationException("Moving an entrant to an already filled set");
             }
-            if (_setLoserGoesTo is not null)
-            {
-                using (_setLoserGoesTo._lockHandler.LockSetWrite())
-                {
-                    if (_setLoserGoesTo._entrant1 is not null)
-                        _setLoserGoesTo._entrant1 = _loser;
-                    else if (_setLoserGoesTo._entrant2 is not null)
-                        _setLoserGoesTo._entrant2 = _loser;
-                    else if (
-                        _setLoserGoesTo._entrant1 != _loser
-                        && _setLoserGoesTo._entrant2 != _loser
-                    )
-                    {
-                        throw new InvalidOperationException(
-                            "Moving an entrant to an already filled set"
-                        );
-                    }
-                }
-            }
-            return true;
         }
+        if (_setLoserGoesTo is not null)
+        {
+            if (_setLoserGoesTo._entrant1 is not null)
+                _setLoserGoesTo._entrant1 = _loser;
+            else if (_setLoserGoesTo._entrant2 is not null)
+                _setLoserGoesTo._entrant2 = _loser;
+            else if (_setLoserGoesTo._entrant1 != _loser && _setLoserGoesTo._entrant2 != _loser)
+            {
+                throw new InvalidOperationException("Moving an entrant to an already filled set");
+            }
+        }
+        return true;
     }
 
     public class Game

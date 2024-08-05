@@ -20,7 +20,7 @@ class TournamentServer()
         app.MapGet("/tournament", () => sh.GetTournamentAsync());
         app.MapPost(
             "/tournament",
-            (Delegate)((HttpContext context) => sh.HandleTournamentPost(context))
+            (Delegate)((HttpContext context) => sh.HandleTournamentPostAsync(context))
         );
         app.MapGet("/entrant/{id}", (int id) => sh.GetEntrantByIdAsync(id));
         app.MapGet("/set/{id}", (int id) => sh.GetSetByIdAsync(id));
@@ -29,11 +29,20 @@ class TournamentServer()
         app.MapGet("/status", () => sh.GetStatusAsync());
         app.MapPost(
             "/tournament/transitionTo/{status}",
-            (string status) => sh.HandleTournamentStatusTransition(status)
+            (string status) => sh.HandleTournamentStatusTransitionAsync(status)
         );
         app.MapPost(
             "/set/{id}/addGame",
-            (int id, HttpContext context) => sh.HandleGamePost(id, context)
+            (int id, HttpContext context) => sh.HandleGamePostAsync(id, context)
+        );
+        app.MapPost("/set/{id}/progress", (int id) => sh.UpdateSetBasedOnGamesAsync(id));
+        app.MapPost(
+            "set/{id}/transition/{state}",
+            (int id, string state) => sh.HandleSetStatusTransitionAsync(id, state)
+        );
+        app.MapPost(
+            "/set/{id}/moveWinnerAndLoser",
+            (int id) => sh.HandleSetMoveWinnersAndLoserAsync(id)
         );
 
         //First clarg is path to JSON to load - if nothing is passed, the no JSON is read
@@ -249,7 +258,7 @@ class TournamentServer()
             return Results.Content(json, "application/json");
         }
 
-        public async Task<IResult> HandleTournamentPost(HttpContext context)
+        public async Task<IResult> HandleTournamentPostAsync(HttpContext context)
         {
             using (StreamReader reader = new StreamReader(context.Request.Body, Encoding.UTF8))
             {
@@ -268,7 +277,7 @@ class TournamentServer()
             }
         }
 
-        public async Task<IResult> HandleTournamentStatusTransition(string transitionTo)
+        public async Task<IResult> HandleTournamentStatusTransitionAsync(string transitionTo)
         {
             if (tournament is null)
             {
@@ -299,34 +308,37 @@ class TournamentServer()
             }
         }
 
-        public async Task<IResult> HandleGamePost(int setId, HttpContext context)
+        public async Task<IResult> HandleGamePostAsync(int setId, HttpContext context)
         {
             if (tournament is null)
             {
                 return Results.BadRequest("No tournament exists");
             }
-            using (StreamReader reader = new StreamReader(context.Request.Body, Encoding.UTF8))
+            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
+            try
             {
-                string jsonBody = await reader.ReadToEndAsync();
-                if (jsonBody is null)
+                var setToTieTo = await tournament.TryGetSetAsync(setId);
+                if (setToTieTo is null)
+                    return Results.BadRequest("Set game is being added to does not exist");
+                if (setToTieTo.Status != Set.SetStatus.InProgress)
                 {
-                    return Results.BadRequest("Request has no body");
+                    return Results.BadRequest("Set has to be InProgress.");
                 }
-                Console.WriteLine(jsonBody);
-                MyFormatConverter.GameLinksReport? glr =
-                    JsonSerializer.Deserialize<MyFormatConverter.GameLinksReport>(
-                        jsonBody,
-                        new JsonSerializerOptions() { Converters = { gameLinksConverter } }
-                    );
-                if (glr is null)
-                    return Results.BadRequest("Failed to deserialize game");
-
-                var setsLock = await tournament.LockHandler.LockSetsReadAsync();
-                try
+                using (StreamReader reader = new StreamReader(context.Request.Body, Encoding.UTF8))
                 {
-                    var setToTieTo = await tournament.TryGetSetAsync(setId);
-                    if (setToTieTo is null)
-                        return Results.BadRequest("Set game is being added to does not exist");
+                    string jsonBody = await reader.ReadToEndAsync();
+                    if (jsonBody is null)
+                    {
+                        return Results.BadRequest("Request has no body");
+                    }
+                    Console.WriteLine(jsonBody);
+                    MyFormatConverter.GameLinksReport? glr =
+                        JsonSerializer.Deserialize<MyFormatConverter.GameLinksReport>(
+                            jsonBody,
+                            new JsonSerializerOptions() { Converters = { gameLinksConverter } }
+                        );
+                    if (glr is null)
+                        return Results.BadRequest("Failed to deserialize game");
 
                     using (await setToTieTo.LockHandler.LockSetWriteAsync())
                     {
@@ -337,8 +349,10 @@ class TournamentServer()
                             return Results.BadRequest("One of the entrants is null");
 
                         Entrant? winner = null;
-                        if (entrant1.EntrantId == glr.GameWinnerId) winner = entrant1;
-                        else if (entrant2.EntrantId == glr.GameWinnerId) winner = entrant2;
+                        if (entrant1.EntrantId == glr.GameWinnerId)
+                            winner = entrant1;
+                        else if (entrant2.EntrantId == glr.GameWinnerId)
+                            winner = entrant2;
 
                         Set.Game game = new Set.Game(
                             setToTieTo,
@@ -370,8 +384,14 @@ class TournamentServer()
                         else if (amountOfMatchingSets == 0)
                         {
                             // Get highest gameNumber already existing, the game we want to create has to be the subsequent game number
-                            if ( setToTieTo.Games.Count == 0 && game.GameNumber != 1 ) return Results.BadRequest("First game must have gameNumber set to 1.");
-                            else if (setToTieTo.Games.Count > 0 && glr.GameNumber != setToTieTo.Games.Max(x => x.GameNumber) + 1)
+                            if (setToTieTo.Games.Count == 0 && game.GameNumber != 1)
+                                return Results.BadRequest(
+                                    "First game must have gameNumber set to 1."
+                                );
+                            else if (
+                                setToTieTo.Games.Count > 0
+                                && glr.GameNumber != setToTieTo.Games.Max(x => x.GameNumber) + 1
+                            )
                             {
                                 return Results.BadRequest(
                                     "GameNumber is not the directly subsequent game for the given set."
@@ -383,10 +403,156 @@ class TournamentServer()
                         return Results.BadRequest();
                     }
                 }
+            }
+            finally
+            {
+                tournament.LockHandler.UnlockSetsLock(setsLock);
+            }
+        }
+
+        public async Task<IResult> UpdateSetBasedOnGamesAsync(int setId)
+        {
+            if (tournament is null)
+            {
+                return Results.BadRequest("No tournament exists");
+            }
+            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
+            try
+            {
+                var set = await tournament.TryGetSetAsync(setId);
+                if (set is null)
+                {
+                    return Results.NotFound();
+                }
+
+                using (await set.LockHandler.LockSetWriteAsync())
+                {
+                    if (set.Status != Set.SetStatus.InProgress)
+                    {
+                        return Results.BadRequest(
+                            "Set has to be InProgress to be updated based on games."
+                        );
+                    }
+
+                    try
+                    {
+                        if (set.UpdateSetBasedOnGames())
+                        {
+                            return Results.Ok("Set was updated.");
+                        }
+                        return Results.Ok("Set was not updated.");
+                    }
+                    catch
+                    {
+                        return Results.Problem("An error occured when checking the games.");
+                    }
+                }
+            }
+            finally
+            {
+                tournament.LockHandler.UnlockSetsLock(setsLock);
+            }
+        }
+
+        public async Task<IResult> HandleSetStatusTransitionAsync(int setId, string transitionTo)
+        {
+            if (tournament is null)
+            {
+                return Results.BadRequest("No tournament exists");
+            }
+            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
+            try
+            {
+                var set = await tournament.TryGetSetAsync(setId);
+                if (set is null)
+                {
+                    return Results.NotFound();
+                }
+
+                using (await set.LockHandler.LockSetWriteAsync())
+                {
+                    switch (transitionTo)
+                    {
+                        case "WaitingForStart":
+                            bool success = set.TryMoveToWaitingForStart();
+                            if (success)
+                            {
+                                return Results.Ok("Moved the set to WaitingForStart");
+                            }
+                            return Results.BadRequest(
+                                "The set was not able to be moved to WaitingForStart. Check that all entrants are filled, the SetWinnerDecider is filled, and the set is in IncompleteSetup."
+                            );
+                        case "InProgress":
+                            success = set.TryMoveToInProgress();
+                            if (success)
+                            {
+                                return Results.Ok("Moved the set to InProgress");
+                            }
+                            return Results.BadRequest(
+                                "The set was not able to be moved to InProgress. Check that the set is in WaitingForStart."
+                            );
+                        default:
+                            return Results.BadRequest("Not a valid status.");
+                    }
+                }
+            }
+            finally
+            {
+                tournament.LockHandler.UnlockSetsLock(setsLock);
+            }
+        }
+
+        public async Task<IResult> HandleSetMoveWinnersAndLoserAsync(int setId)
+        {
+            if (tournament is null)
+            {
+                return Results.BadRequest("No tournament exists");
+            }
+            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
+            var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync();
+            try
+            {
+                var set = await tournament.TryGetSetAsync(setId);
+                if (set is null)
+                {
+                    return Results.NotFound();
+                }
+
+                List<Set> otherSets = [];
+                if (set.SetWinnerGoesTo is not null)
+                    otherSets.Add(set.SetWinnerGoesTo);
+                if (set.SetLoserGoesTo is not null)
+                    otherSets.Add(set.SetLoserGoesTo);
+                otherSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
+                List<IDisposable> setLocks = new();
+                setLocks.Add(await set.LockHandler.LockSetReadAsync());
+                foreach (Set s in otherSets)
+                {
+                    setLocks.Add(await s.LockHandler.LockSetWriteAsync());
+                }
+
+                try
+                {
+                    bool success = set.TryProgressingWinnerAndLoser();
+                    if (success)
+                        return Results.Ok(
+                            "Set winner and loser have been moved to their next sets."
+                        );
+                    return Results.Ok("No changes.");
+                }
                 finally
                 {
-                    tournament.LockHandler.UnlockSetsLock(setsLock);
+                    setLocks.Reverse();
+                    foreach (IDisposable l in setLocks)
+                    {
+                        l.Dispose();
+                    }
                 }
+            }
+            finally
+            {
+                tournament.LockHandler.UnlockEntrantsLock(entrantsLock);
+                tournament.LockHandler.UnlockSetsLock(setsLock);
             }
         }
     }
