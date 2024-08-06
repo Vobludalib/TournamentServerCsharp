@@ -33,114 +33,53 @@ public class Tournament
         private AsyncReaderWriterLock _entrantsLocker = new();
         private AsyncReaderWriterLock _dataLocker = new();
         private AsyncReaderWriterLock _statusLocker = new();
-        private Dictionary<Guid, IDisposable> _setLocks = new();
-        private Dictionary<Guid, IDisposable> _entrantsLocks = new();
-        private Dictionary<Guid, IDisposable> _dataLocks = new();
-        private Dictionary<Guid, IDisposable> _statusLocks = new();
 
-        public async Task<Guid> LockSetsReadAsync()
+        public async Task<IDisposable> LockSetsReadAsync()
         {
-            Console.WriteLine("Awaiting locking sets for read");
             IDisposable setLock = await _setLocker.ReaderLockAsync();
-            var guid = AddLockToDictWithGuidKey(_setLocks, setLock);
-            Console.WriteLine($"Locked sets with lock {guid} for read");
-            return guid;
+            return setLock;
         }
 
-        public async Task<Guid> LockSetsWriteAsync()
+        public async Task<IDisposable> LockSetsWriteAsync()
         {
-            Console.WriteLine("Awaiting locking sets for write");
             IDisposable setLock = await _setLocker.WriterLockAsync();
-            var guid = AddLockToDictWithGuidKey(_setLocks, setLock);
-            Console.WriteLine($"Locked sets with lock {guid} for write");
-            return guid;
+            return setLock;
         }
 
-        public void UnlockSetsLock(Guid lockGuid)
-        {
-            if (!_setLocks.TryGetValue(lockGuid, out var lockToUnlock))
-            {
-                throw new NullReferenceException();
-            }
-            lockToUnlock.Dispose();
-            _setLocks.Remove(lockGuid);
-            Console.WriteLine($"Unlocked sets lock {lockGuid}");
-        }
-
-        public async Task<Guid> LockEntrantsReadAsync()
+        public async Task<IDisposable> LockEntrantsReadAsync()
         {
             IDisposable entrantsLock = await _entrantsLocker.ReaderLockAsync();
-            return AddLockToDictWithGuidKey(_entrantsLocks, entrantsLock);
+            return entrantsLock;
         }
 
-        public async Task<Guid> LockEntrantsWriteAsync()
+        public async Task<IDisposable> LockEntrantsWriteAsync()
         {
             IDisposable entrantsLock = await _entrantsLocker.WriterLockAsync();
-            return AddLockToDictWithGuidKey(_entrantsLocks, entrantsLock);
+            return entrantsLock;
         }
 
-        public void UnlockEntrantsLock(Guid lockGuid)
-        {
-            if (!_entrantsLocks.TryGetValue(lockGuid, out var lockToUnlock))
-            {
-                throw new NullReferenceException();
-            }
-            lockToUnlock.Dispose();
-            _entrantsLocks.Remove(lockGuid);
-        }
-
-        public async Task<Guid> LockDataReadAsync()
+        public async Task<IDisposable> LockDataReadAsync()
         {
             IDisposable dataLock = await _dataLocker.ReaderLockAsync();
-            return AddLockToDictWithGuidKey(_dataLocks, dataLock);
+            return dataLock;
         }
 
-        public async Task<Guid> LockDataWriteAsync()
+        public async Task<IDisposable> LockDataWriteAsync()
         {
             IDisposable dataLock = await _dataLocker.WriterLockAsync();
-            return AddLockToDictWithGuidKey(_dataLocks, dataLock);
+            return dataLock;
         }
 
-        public void UnlockDataLock(Guid lockGuid)
-        {
-            if (!_dataLocks.TryGetValue(lockGuid, out var lockToUnlock))
-            {
-                throw new NullReferenceException();
-            }
-            lockToUnlock.Dispose();
-            _dataLocks.Remove(lockGuid);
-        }
-
-        public async Task<Guid> LockStatusReadAsync()
+        public async Task<IDisposable> LockStatusReadAsync()
         {
             IDisposable statusLock = await _statusLocker.ReaderLockAsync();
-            return AddLockToDictWithGuidKey(_statusLocks, statusLock);
+            return statusLock;
         }
 
-        public async Task<Guid> LockStatusWriteAsync()
+        public async Task<IDisposable> LockStatusWriteAsync()
         {
             IDisposable statusLock = await _statusLocker.WriterLockAsync();
-            return AddLockToDictWithGuidKey(_statusLocks, statusLock);
-        }
-
-        public void UnlockStatusLock(Guid lockGuid)
-        {
-            if (!_statusLocks.TryGetValue(lockGuid, out var lockToUnlock))
-            {
-                throw new NullReferenceException();
-            }
-            lockToUnlock.Dispose();
-            _statusLocks.Remove(lockGuid);
-        }
-
-        private Guid AddLockToDictWithGuidKey(
-            Dictionary<Guid, IDisposable> locks,
-            IDisposable lockDisposable
-        )
-        {
-            Guid lockGuid = Guid.NewGuid();
-            locks.Add(lockGuid, lockDisposable);
-            return lockGuid;
+            return statusLock;
         }
     }
 
@@ -160,22 +99,20 @@ public class Tournament
     /// <returns></returns>
     public async Task<bool> TryMoveToInProgressAsync()
     {
-        Guid lockGuid = await _lockHandler.LockStatusReadAsync();
-        try
+        using (IDisposable statusLock = await _lockHandler.LockStatusReadAsync())
         {
             if (_status != TournamentStatus.Setup)
                 return false;
         }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(lockGuid);
-        }
 
-        var setLock = await _lockHandler.LockSetsReadAsync();
-        var entrantsLock = await _lockHandler.LockEntrantsReadAsync();
-        var statusLock = await _lockHandler.LockStatusWriteAsync();
-        try
+        using (var setLock = await _lockHandler.LockSetsReadAsync())
+        using (var entrantsLock = await _lockHandler.LockEntrantsReadAsync())
+        using (var statusLock = await _lockHandler.LockStatusWriteAsync())
         {
+            // Status can change during the time it takes to get all the locks - first check just helps eliminate the vast majority of cases early
+            if (_status != TournamentStatus.Setup)
+                return false;
+
             if (await VerifyStructureAsync())
             {
                 _status = TournamentStatus.InProgress;
@@ -183,28 +120,17 @@ public class Tournament
             }
             return false;
         }
-        finally
-        {
-            _lockHandler.UnlockSetsLock(setLock);
-            _lockHandler.UnlockEntrantsLock(entrantsLock);
-            _lockHandler.UnlockStatusLock(statusLock);
-        }
     }
 
     public async Task<bool> TryMoveToFinishedAsync()
     {
         // Writer lock is exclusive, so we can also read safely
-        var statusLock = await _lockHandler.LockStatusWriteAsync();
-        try
+        using (var statusLock = await _lockHandler.LockStatusWriteAsync())
         {
             if (_status != TournamentStatus.InProgress)
                 return false;
             _status = TournamentStatus.Finished;
             return true;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
         }
     }
 
@@ -354,32 +280,25 @@ public class Tournament
     /// <returns></returns>
     public async Task<bool> AddSetAsync(Set set)
     {
-        var statusLock = await _lockHandler.LockStatusReadAsync();
-        try
+        using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
             if (_status != TournamentStatus.Setup)
                 return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
-        }
 
-        var setLock = await _lockHandler.LockSetsWriteAsync();
-        try
-        {
-            if (_sets.Keys.Contains(set.SetId))
-                return false;
-            _sets.Add(set.SetId, set);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockSetsLock(setLock);
+            using (var setLock = await _lockHandler.LockSetsWriteAsync())
+            {
+                try
+                {
+                    if (_sets.Keys.Contains(set.SetId))
+                        return false;
+                    _sets.Add(set.SetId, set);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
         }
     }
 
@@ -390,77 +309,55 @@ public class Tournament
     /// <returns></returns>
     public async Task<bool> TryRemoveSetAsync(int id)
     {
-        var statusLock = await _lockHandler.LockStatusReadAsync();
-        try
+        using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
             if (_status != TournamentStatus.Setup)
                 return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
-        }
 
-        var setLock = await _lockHandler.LockSetsWriteAsync();
-        try
-        {
-            if (_sets.ContainsKey(id))
+            using (var setLock = await _lockHandler.LockSetsWriteAsync())
             {
-                _sets.Remove(id);
-                return true;
+                if (_sets.ContainsKey(id))
+                {
+                    _sets.Remove(id);
+                    return true;
+                }
+                return false;
             }
-            return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockSetsLock(setLock);
         }
     }
 
     public async Task<Set?> TryGetSetAsync(int id)
     {
-        var setLock = await _lockHandler.LockSetsReadAsync();
-        try
+        using (var setLock = await _lockHandler.LockSetsReadAsync())
         {
             bool success = _sets.TryGetValue(id, out var set);
             if (success)
                 return set;
             return null;
         }
-        finally
-        {
-            _lockHandler.UnlockSetsLock(setLock);
-        }
     }
 
     public async Task<bool> AddEntrantAsync(Entrant entrant)
     {
         var statusLock = await _lockHandler.LockStatusReadAsync();
-        try
         {
             if (_status != TournamentStatus.Setup)
                 return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
-        }
 
-        var entrantsLock = await _lockHandler.LockEntrantsReadAsync();
-        try
-        {
-            if (_entrants.Keys.Contains(entrant.EntrantId))
-                return false;
-            _entrants.Add(entrant.EntrantId, entrant);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockEntrantsLock(entrantsLock);
+            using (var entrantsLock = await _lockHandler.LockEntrantsReadAsync())
+            {
+                try
+                {
+                    if (_entrants.Keys.Contains(entrant.EntrantId))
+                        return false;
+                    _entrants.Add(entrant.EntrantId, entrant);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
         }
     }
 
@@ -471,46 +368,38 @@ public class Tournament
     /// <returns></returns>
     public async Task<bool> TryRemoveEntrantAsync(int id)
     {
-        var statusLock = await _lockHandler.LockStatusReadAsync();
-        try
+        using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
             if (_status != TournamentStatus.Setup)
                 return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
-        }
 
-        var entrantsLock = await _lockHandler.LockEntrantsWriteAsync();
-        try
-        {
-            if (_entrants.ContainsKey(id))
+            using (var entrantsLock = await _lockHandler.LockEntrantsWriteAsync())
             {
-                _entrants.Remove(id);
-                return true;
+                try
+                {
+                    if (_entrants.ContainsKey(id))
+                    {
+                        _entrants.Remove(id);
+                        return true;
+                    }
+                    return false;
+                }
+                catch
+                {
+                    return false;
+                }
             }
-            return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockEntrantsLock(entrantsLock);
         }
     }
 
     public async Task<Entrant?> TryGetEntrantAsync(int id)
     {
-        var entrantLock = await _lockHandler.LockEntrantsReadAsync();
-        try
+        using (var entrantLock = await _lockHandler.LockEntrantsReadAsync())
         {
             bool success = _entrants.TryGetValue(id, out var entrant);
             if (success)
                 return entrant;
             return null;
-        }
-        finally
-        {
-            _lockHandler.UnlockEntrantsLock(entrantLock);
         }
     }
 
@@ -523,35 +412,28 @@ public class Tournament
     /// <returns></returns>
     public async Task<bool> AddOrEditDataAsync(string label, string value)
     {
-        var statusLock = await _lockHandler.LockStatusReadAsync();
-        try
+        using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
             if (_status == TournamentStatus.Finished)
                 return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
-        }
 
-        var dataLock = await _lockHandler.LockDataWriteAsync();
-        try
-        {
-            if (_data.ContainsKey(label))
-                _data[label] = value;
-            else
+            using (var dataLock = await _lockHandler.LockDataWriteAsync())
             {
-                _data.Add(label, value);
+                try
+                {
+                    if (_data.ContainsKey(label))
+                        _data[label] = value;
+                    else
+                    {
+                        _data.Add(label, value);
+                    }
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockDataLock(dataLock);
         }
     }
 
@@ -562,77 +444,65 @@ public class Tournament
     /// <returns></returns>
     public async Task<bool> DeleteDataAsync(string label)
     {
-        var statusLock = await _lockHandler.LockStatusReadAsync();
-        try
+        using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
             if (_status == TournamentStatus.Finished)
                 return false;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
-        }
 
-        var dataLock = await _lockHandler.LockDataWriteAsync();
-        try
-        {
-            if (_data.ContainsKey(label))
+            using (var dataLock = await _lockHandler.LockDataWriteAsync())
             {
-                _data.Remove(label);
-                return true;
+                try
+                {
+                    if (_data.ContainsKey(label))
+                    {
+                        _data.Remove(label);
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
             }
-            else
-            {
-                return false;
-            }
-        }
-        finally
-        {
-            _lockHandler.UnlockDataLock(dataLock);
         }
     }
 
     public async Task<string?> TryGetDataAsync(string label)
     {
-        var dataLock = await _lockHandler.LockDataReadAsync();
-        try
+        using (var dataLock = await _lockHandler.LockDataReadAsync())
         {
             bool success = _data.TryGetValue(label, out var value);
             if (success)
                 return value;
             return null;
         }
-        finally
-        {
-            _lockHandler.UnlockDataLock(dataLock);
-        }
     }
 
     public async Task<Dictionary<string, string>> GetAllDataAsync()
     {
-        var dataLock = await _lockHandler.LockDataReadAsync();
         // We have to clone the dict and create a snapshot at the time, so we can free up the lock while ensuring the dict does not change after this method returns.
         Dictionary<string, string> clonedDict = new();
-        // Not doing Parallel.Foreach, as every loop is really simple, and the overhead would be too large.
-        foreach (var key in _data.Keys)
+        using (var dataLock = await _lockHandler.LockDataReadAsync())
         {
-            // Strings are immutable, so we don't need to copy - these references will never change
-            clonedDict.Add(key, _data[key]);
+            // Not doing Parallel.Foreach, as every loop is really simple, and the overhead would be too large.
+            foreach (var key in _data.Keys)
+            {
+                // Strings are immutable, so we don't need to copy - these references will never change
+                clonedDict.Add(key, _data[key]);
+            }
         }
-        _lockHandler.UnlockDataLock(dataLock);
         return clonedDict;
     }
 
     public async Task<TournamentStatus> GetStatusAsync()
     {
-        var statusLock = await _lockHandler.LockStatusReadAsync();
-        try
+        using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
             return _status;
-        }
-        finally
-        {
-            _lockHandler.UnlockStatusLock(statusLock);
         }
     }
 }

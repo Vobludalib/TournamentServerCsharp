@@ -15,7 +15,12 @@ class TournamentServer()
 
         var sh = new ServerHandler();
 
-        app.MapGet("/", () => "Hello");
+        var redirect = () =>
+        {
+            return Results.Redirect("https://github.com/Vobludalib/TournamentServerCsharp");
+        };
+
+        app.MapGet("/", redirect);
 
         app.MapGet("/tournament", () => sh.GetTournamentAsync());
         app.MapPost(
@@ -85,25 +90,6 @@ class TournamentServer()
 
         app.Run();
     }
-
-    /**
-    TODO:
-        Create all the endpoints with needed information
-        Create all the endpoints for changing games
-
-        GET:
-            Whole Tournament JSON
-            Tournament data + status only
-            Set JSON
-            Set info only
-            Game JSON
-            Entrant JSON
-        POST:
-            Updating info in tournament + status transitions
-            Updating info in set + status transitions
-            Updating info in game + status transitions
-            Creating/updating/deleting entrant during tournament setup
-    **/
 
     public class ServerHandler
     {
