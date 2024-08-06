@@ -965,7 +965,7 @@ public class Set
             Game game = new Game(this, gr.GameNumber, e1, e2, gr.Data);
             Entrant? winner = reducedSearch.FirstOrDefault(x => x.EntrantId == gr.GameWinnerId);
             if (winner is not null)
-                game.SetWinner(winner);
+                AsyncContext.Run(() => game.SetWinnerAsync(winner));
             if (gr.Status is null)
             {
                 throw new JsonException();
@@ -1101,14 +1101,16 @@ public class Set
         private readonly Entrant _entrant2;
         private Entrant? _gameWinner;
         private GameStatus _status;
-        private object _locker;
+
+        // Omitting whole LockHandler here - no need for the overhead here, can be added if needed.
+        private AsyncReaderWriterLock _lock;
 
         public int GameNumber => _gameNumber;
         public Entrant Entrant1 => _entrant1;
         public Entrant Entrant2 => _entrant2;
         public Entrant? GameWinner => _gameWinner;
-
         public GameStatus Status => _status;
+        public AsyncReaderWriterLock Lock => _lock;
 
         public enum GameStatus
         {
@@ -1139,7 +1141,7 @@ public class Set
                 _data = new Dictionary<string, string>();
             _data = Data!;
             _status = GameStatus.Waiting;
-            _locker = new();
+            _lock = new();
         }
 
         // Used when deserializing a game
@@ -1162,16 +1164,16 @@ public class Set
                 _data = new Dictionary<string, string>();
             _data = Data!;
             _status = Status;
-            _locker = new();
+            _lock = new();
         }
 
         /// <summary>
         /// Method to move from InProgress to Waiting - should only be used to roll-back misclicks. Returns true if succesful, otherwise false.
         /// </summary>
         /// <returns></returns>
-        public bool TryMovingToWaiting()
+        public async Task<bool> TryMovingToWaitingAsync()
         {
-            lock (_locker)
+            using (await _lock.WriterLockAsync())
             {
                 if (_status == GameStatus.InProgress)
                 {
@@ -1186,11 +1188,11 @@ public class Set
         /// Method to move from Waiting to InProgress. Returns true if succesful, otherwise false.
         /// </summary>
         /// <returns></returns>
-        public bool TryMovingToInProgress()
+        public async Task<bool> TryMovingToInProgressAsync()
         {
-            lock (_locker)
+            using (await _lock.WriterLockAsync())
             {
-                if (_status == GameStatus.Waiting)
+                if (_status == GameStatus.Waiting && _entrant1 is not null && _entrant2 is not null)
                 {
                     _status = GameStatus.InProgress;
                     return true;
@@ -1199,18 +1201,19 @@ public class Set
             }
         }
 
-        public void SetWinner(Entrant winner)
+        /// <summary>
+        /// This assumes that the parent set is locked for writing already.
+        /// </summary>
+        /// <param name="winner"></param>
+        /// <exception cref="InvalidOperationException"></exception>
+        public async Task SetWinnerAsync(Entrant winner)
         {
-            // Locking set locker first, so no one can change set (such as removing this game from the set), while we are doing something
-            using (_parentSet._lockHandler.LockSetWrite())
+            using (await _lock.WriterLockAsync())
             {
-                lock (_locker)
-                {
-                    if (winner != Entrant1 && winner != Entrant2)
-                        throw new InvalidOperationException();
-                    _gameWinner = winner;
-                    _status = GameStatus.Finished;
-                }
+                if (winner != Entrant1 && winner != Entrant2)
+                    throw new InvalidOperationException();
+                _gameWinner = winner;
+                _status = GameStatus.Finished;
             }
         }
 

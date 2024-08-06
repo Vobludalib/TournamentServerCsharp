@@ -44,6 +44,16 @@ class TournamentServer()
             "/set/{id}/moveWinnerAndLoser",
             (int id) => sh.HandleSetMoveWinnersAndLoserAsync(id)
         );
+        app.MapPost(
+            "/set/{setId}/game/{gameId}/transitionTo/{state}",
+            (int setId, int gameId, string state) =>
+                sh.HandleGameStatusTransitionAsync(setId, gameId, state)
+        );
+        app.MapPost(
+            "/set/{setId}/game/{gameId}/setWinner/{entrantId}",
+            (int setId, int gameId, int entrantId) =>
+                sh.HandleGameUpdateWinnerAsync(setId, gameId, entrantId)
+        );
 
         //First clarg is path to JSON to load - if nothing is passed, the no JSON is read
 
@@ -553,6 +563,122 @@ class TournamentServer()
             {
                 tournament.LockHandler.UnlockEntrantsLock(entrantsLock);
                 tournament.LockHandler.UnlockSetsLock(setsLock);
+            }
+        }
+
+        public async Task<IResult> HandleGameStatusTransitionAsync(
+            int setId,
+            int gameNumber,
+            string transitionTo
+        )
+        {
+            if (tournament is null)
+            {
+                return Results.BadRequest("No tournament exists");
+            }
+            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
+            try
+            {
+                var set = await tournament.TryGetSetAsync(setId);
+                if (set is null)
+                {
+                    return Results.NotFound();
+                }
+
+                using (await set.LockHandler.LockSetReadAsync())
+                {
+                    var game = set.Games.Where(g => g.GameNumber == gameNumber).FirstOrDefault();
+                    if (game is null)
+                    {
+                        return Results.NotFound(
+                            "That set does not contain that a game with that number."
+                        );
+                    }
+
+                    switch (transitionTo)
+                    {
+                        case "Waiting":
+                            bool success = await game.TryMovingToWaitingAsync();
+                            if (success)
+                            {
+                                return Results.Ok("Game has been moved back to Waiting.");
+                            }
+                            return Results.BadRequest(
+                                "The game was not able to be moved to Waiting. Check that the game is in InProgress."
+                            );
+                        case "InProgress":
+                            success = await game.TryMovingToInProgressAsync();
+                            if (success)
+                            {
+                                return Results.Ok("Moved the set to InProgress");
+                            }
+                            return Results.BadRequest(
+                                "The set was not able to be moved to InProgress. Check that the game has all entrants filled and is in Waiting."
+                            );
+                        default:
+                            return Results.BadRequest("Not a valid status.");
+                    }
+                }
+            }
+            finally
+            {
+                tournament.LockHandler.UnlockSetsLock(setsLock);
+            }
+        }
+
+        public async Task<IResult> HandleGameUpdateWinnerAsync(
+            int setId,
+            int gameNumber,
+            int entrantId
+        )
+        {
+            {
+                if (tournament is null)
+                {
+                    return Results.BadRequest("No tournament exists");
+                }
+                var setsLock = await tournament.LockHandler.LockSetsReadAsync();
+                var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync();
+                try
+                {
+                    var set = await tournament.TryGetSetAsync(setId);
+                    if (set is null)
+                    {
+                        return Results.NotFound("Could not find the set.");
+                    }
+
+                    var entrant = await tournament.TryGetEntrantAsync(entrantId);
+                    if (entrant is null)
+                    {
+                        return Results.NotFound("Could not find the entrant.");
+                    }
+
+                    using (await set.LockHandler.LockSetReadAsync())
+                    {
+                        var game = set.Games
+                            .Where(g => g.GameNumber == gameNumber)
+                            .FirstOrDefault();
+                        if (game is null)
+                        {
+                            return Results.NotFound(
+                                "That set does not contain that a game with that number."
+                            );
+                        }
+
+                        if (entrant != game.Entrant1 && entrant != game.Entrant2)
+                            return Results.BadRequest(
+                                "That new 'winner' is not a participant of the game."
+                            );
+
+                        await game.SetWinnerAsync(entrant);
+                        return Results.Ok("Winner was set");
+                    }
+                }
+                finally
+                {
+                    tournament.LockHandler.UnlockEntrantsLock(entrantsLock);
+                    tournament.LockHandler.UnlockSetsLock(setsLock);
+                }
             }
         }
     }
