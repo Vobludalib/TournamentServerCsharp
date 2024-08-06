@@ -424,7 +424,7 @@ class TournamentServer()
 
                     try
                     {
-                        if (set.UpdateSetBasedOnGames())
+                        if (await set.UpdateSetBasedOnGames())
                         {
                             return Results.Ok("Set was updated.");
                         }

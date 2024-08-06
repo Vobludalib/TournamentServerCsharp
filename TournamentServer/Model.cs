@@ -6,8 +6,11 @@ using Nito.AsyncEx;
 namespace TournamentSystem;
 
 /// <summary>
-/// Class that stores all the data about the tournament
+/// Class that stores all the data about the tournament.
 /// </summary>
+/// <remarks>
+/// Nearly all async methods for Tournament handle their own locking.
+/// </remarks>
 public class Tournament
 {
     private Dictionary<int, Set> _sets { get; set; }
@@ -578,6 +581,13 @@ public class Tournament
     }
 }
 
+/// <summary>
+/// Class the represents individual sets in the tournament (each set can be comprised of multiple games).
+/// </summary>
+/// <remarks>
+/// Be careful of which methods expect certain locks to already be locked - not all the lock handling occurs in this class.
+/// The properties are all synchronous (as is expected), so use these with caution in async contexts. I have not written async get and set methods, but these might be necessary for fine control.
+/// </remarks>
 public class Set
 {
     private int _setId;
@@ -590,10 +600,13 @@ public class Set
     private Entrant? _winner;
     private Entrant? _loser;
     private List<Game> _games;
+
+    // See the interface for what this is
     private IWinnerDecider? _setDecider;
     private Dictionary<string, string> _data;
     private SetLockHandler _lockHandler;
 
+    // The following properties are all asynchronous and use synchronous locking (if any at all). Use these only in synchronous and single-threaded contexts unless you think it through.
     public int SetId
     {
         get => _setId;
@@ -742,23 +755,26 @@ public class Set
 
     public SetLockHandler LockHandler => _lockHandler;
 
+    /// <summary>
+    /// See Tournament.TournamentLockHandler for explanation why these exist.
+    /// </summary>
+    /// <remarks>
+    /// Note that for sets, I have opted to lock the entire set as a whole, and not individual fields - in most use cases, only one user will be sending requests to read/edit any given set, so it would be too much overhead to have such fine control.
+    /// This can be changed if it is found that the aforementioned is actually a common usecase.
+    /// </remarks>
     public class SetLockHandler
     {
         private AsyncReaderWriterLock _setLocker = new();
 
         public async Task<IDisposable> LockSetReadAsync()
         {
-            Console.WriteLine("Awaiting locking set for read");
             IDisposable setLock = await _setLocker.ReaderLockAsync();
-            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for read");
             return setLock;
         }
 
         public async Task<IDisposable> LockSetWriteAsync()
         {
-            Console.WriteLine("Awaiting locking set for write");
             IDisposable setLock = await _setLocker.WriterLockAsync();
-            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for write");
             return setLock;
         }
 
@@ -766,22 +782,26 @@ public class Set
         public IDisposable LockSetRead()
         {
             IDisposable setLock = _setLocker.ReaderLock();
-            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for read");
             return setLock;
         }
 
         public IDisposable LockSetWrite()
         {
             IDisposable setLock = _setLocker.WriterLock();
-            Console.WriteLine($"Locked set with lock {setLock.GetHashCode()} for write");
             return setLock;
         }
     }
 
-    // I only have a constructor with only ID, as the fields will be set later. This is because
-    // of the order in which a tournament must be reconstructed from JSON, but also
-    // because these fields will change inherently as a tournament progresses. An entrant on the other
-    // hand should not change once it is created, as it is immutable.
+    /// <summary>
+    /// Constructor for Set given an ID.
+    /// </summary>
+    /// <remarks>
+    /// I only have a constructor with only ID, as the fields will be set later. This is because
+    /// of the order in which a tournament must be reconstructed from JSON, but also
+    /// because these fields will change inherently as a tournament progresses. An entrant on the other
+    /// hand should not change once it is created, as it is immutable.
+    /// </remarks>
+    /// <param name="Id"></param>
     public Set(int Id)
     {
         _data = new Dictionary<string, string>();
@@ -793,10 +813,11 @@ public class Set
 
     /// <summary>
     /// IWinnerDecider is an interface used for specifying custom set-winner conditions.
-    ///
+    ///</summary>
+    ///<remarks>
     /// E.g. tennis will have a WinnerDecider that works with the win-by-two condition, while most sports
     /// just have a first to X wins condition.
-    /// </summary>
+    /// </remarks>
     public interface IWinnerDecider
     {
         public Entrant? DecideWinner(Entrant entrant1, Entrant entrant2, List<Game> games);
@@ -814,6 +835,15 @@ public class Set
             AmountOfWinsRequired = requiredWins;
         }
 
+        /// <summary>
+        /// Method that applies the BestOf rules for to decide a winner (if any), along with handling certain illegal states of the set.
+        /// </summary>
+        /// <param name="entrant1"></param>
+        /// <param name="entrant2"></param>
+        /// <param name="games"></param>
+        /// <returns>Entrant? - if a winner is found winning Entrant is returned, otherwise null</returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        /// <exception cref="NotImplementedException"></exception>
         public Entrant? DecideWinner(Entrant entrant1, Entrant entrant2, List<Game> games)
         {
             int entrant1Wins = 0;
@@ -922,9 +952,12 @@ public class Set
     ///
     /// This method assumes that the set it is working with is appropriately locked already.
     /// </summary>
-    /// <returns></returns>
+    /// <remarks>
+    /// This method expects that the set is already locked for writing before the method is called.
+    /// </remarks>
+    /// <returns>Bool - true if the set was updated, false on failure or no update</returns>
     /// <exception cref="NullReferenceException"></exception>
-    public bool UpdateSetBasedOnGames()
+    public async Task<bool> UpdateSetBasedOnGames()
     {
         if (_status != SetStatus.InProgress)
         {
@@ -939,7 +972,24 @@ public class Set
         {
             throw new NullReferenceException("Set is InProgress without both entrants set.");
         }
-        Entrant? winner = _setDecider.DecideWinner(_entrant1, _entrant2, Games);
+        // Lock the game objects in gameNumber order
+        Entrant? winner;
+        IEnumerable<Game> gamesInOrder = Games.OrderBy(x => x.GameNumber);
+        List<IDisposable> locks = new();
+        foreach (Game game in gamesInOrder)
+        {
+            locks.Add(await game.Lock.ReaderLockAsync());
+        }
+        try
+        {
+            winner = _setDecider.DecideWinner(_entrant1, _entrant2, Games);
+        }
+        finally
+        {
+            locks.Reverse();
+            foreach (IDisposable l in locks)
+                l.Dispose();
+        }
         // If no winner, we return false.
         if (winner is null)
             return false;
@@ -966,10 +1016,9 @@ public class Set
 
     /// <summary>
     /// Method that tries to move Set to WaitingForStart, if all entrants and the winnerDecider are set (and we are in a valid state)
-    ///
-    /// This method assumes that the set it is working with is appropriately locked already.
     /// </summary>
-    /// <returns></returns>
+    /// <remarks>This method assumes that the set it is working with is appropriately locked for writing already.</remarks>
+    /// <returns>Bool - true on success, false on failure</returns>
     public bool TryMoveToWaitingForStart()
     {
         if (_status != SetStatus.IncompleteSetup)
@@ -981,11 +1030,10 @@ public class Set
     }
 
     /// <summary>
-    /// Method that tries to move Set to InProgress, if conditions are satisfied (returns true). Otherwise, returns false.
-    ///
-    /// This method assumes that the set it is working with is appropriately locked already.
+    /// Method that tries to move Set to InProgress, if all conditions are met (we are in a valid state)
     /// </summary>
-    /// <returns></returns>
+    /// <remarks>This method assumes that the set it is working with is appropriately locked for writing already.</remarks>
+    /// <returns>Bool - true on success, false on failure</returns>
     public bool TryMoveToInProgress()
     {
         if (_status != SetStatus.WaitingForStart)
@@ -995,11 +1043,12 @@ public class Set
     }
 
     /// <summary>
-    /// Method for moving winner and loser to the sets they play in next (if any). Returns true on success, false otherwise.
-    ///
-    /// This method assumes that the set it is working with is appropriately locked already.
+    /// Method for moving winner and loser to the sets they play in next (if any
     /// </summary>
-    /// <returns></returns>
+    /// <remarks>
+    /// This method assumes that the set it is working with is appropriately locked already for writing.
+    /// </remarks>
+    /// <returns>Bool - true on success, failure on failure or no update</returns>
     public bool TryProgressingWinnerAndLoser()
     {
         if (_status != SetStatus.Finished)
@@ -1031,6 +1080,9 @@ public class Set
         return true;
     }
 
+    /// <summary>
+    /// Class representing a single game inside a set
+    /// </summary>
     public class Game
     {
         public readonly Set _parentSet;
@@ -1066,6 +1118,14 @@ public class Set
         private Dictionary<string, string> _data = new();
         public Dictionary<string, string> Data => _data;
 
+        /// <summary>
+        /// Normal constructor for Game - we let Status and Winner be decided by the constructor
+        /// </summary>
+        /// <param name="ParentSet"></param>
+        /// <param name="GameNumber"></param>
+        /// <param name="Entrant1"></param>
+        /// <param name="Entrant2"></param>
+        /// <param name="Data"></param>
         public Game(
             Set ParentSet,
             int GameNumber,
@@ -1085,7 +1145,19 @@ public class Set
             _lock = new();
         }
 
-        // Used when deserializing a game
+        /// <summary>
+        /// Constructor for Game used when deserializing JSON when we already know the Winner and Status
+        /// </summary>
+        /// <remarks>
+        /// Do not use unless you have a good reason to.
+        /// </remarks>
+        /// <param name="ParentSet"></param>
+        /// <param name="GameNumber"></param>
+        /// <param name="Entrant1"></param>
+        /// <param name="Entrant2"></param>
+        /// <param name="Winner"></param>
+        /// <param name="Status"></param>
+        /// <param name="Data"></param>
         internal Game(
             Set ParentSet,
             int GameNumber,
@@ -1111,7 +1183,8 @@ public class Set
         /// <summary>
         /// Method to move from InProgress to Waiting - should only be used to roll-back misclicks. Returns true if succesful, otherwise false.
         /// </summary>
-        /// <returns></returns>
+        /// <remarks>Locking handled in the method - no expectations on other locks</remarks>
+        /// <returns>Bool - true on success, false on failure</returns>
         public async Task<bool> TryMovingToWaitingAsync()
         {
             using (await _lock.WriterLockAsync())
@@ -1126,9 +1199,10 @@ public class Set
         }
 
         /// <summary>
-        /// Method to move from Waiting to InProgress. Returns true if succesful, otherwise false.
+        /// Method to move from Waiting to InProgress.
         /// </summary>
-        /// <returns></returns>
+        /// <remarks>Locking handled in the method - no expectations on other locks</remarks>
+        /// <returns>Bool - true if succesful, otherwise false.</returns>
         public async Task<bool> TryMovingToInProgressAsync()
         {
             using (await _lock.WriterLockAsync())
@@ -1143,7 +1217,7 @@ public class Set
         }
 
         /// <summary>
-        /// This assumes that the parent set is locked for writing already.
+        /// Method for setting the winner of the Game - contains checks to ensure the "Winner" is part of the Game.
         /// </summary>
         /// <param name="winner"></param>
         /// <exception cref="InvalidOperationException"></exception>
@@ -1169,29 +1243,45 @@ public class Set
     }
 }
 
-public abstract class Entrant
+/// <summary>
+/// Class that represents the idea of an entrant of the tournament
+/// </summary>
+/// <remarks>This class is meant to be immutable - once an entrant is created, to edit it we have to create a new one that copies from the old one.</remarks>
+public abstract record class Entrant
 {
     public int EntrantId { get; init; }
 
-    // This is a dictionary, as we don't have a set promise from the JSON as to what information
-    // can or can't be included, instead we just store directly from the JSON and any parsing is done
-    // when required
+    /// <remarks>
+    /// This is a dictionary, as we don't have a set promise from the JSON as to what information
+    /// can or can't be included, instead we just store directly from the JSON and any parsing is done
+    /// when required
+    /// </remarks>
     protected Dictionary<string, string> _entrantData = new Dictionary<string, string>();
     public Dictionary<string, string> EntrantData => _entrantData;
 }
 
-public class IndividualEntrant : Entrant
+/// <summary>
+/// Represents an individual person entering the tournament
+/// </summary>
+public record class IndividualEntrant : Entrant
 {
-    // This is kept as an EntrantName type - this is because I allow the JSON to specify the info
-    // firstName, lastName if you want to store them seperately, or just tag for a single string.
+    /// <remarks>
+    /// This is kept as an EntrantName type - this is because I allow the JSON to specify the info
+    /// firstName, lastName if you want to store them seperately, or just tag for a single string.
+    /// </remarks>
     public Name EntrantName { get; init; }
 
+    /// <summary>
+    /// Class representing a Name - either can be a normal 'person's' name (first name, last name) or a tag (i.e. pseudonyms - common in esports)
+    /// </summary>
     public abstract class Name
     {
         public abstract string GetFullName();
 
-        // For now, we do hard-coded condensed versions, see relevant method, but
-        // this can be expanded to allow custom definitions of 'condensed' form in the JSON itself
+        /// <remarks>
+        /// For now, we do hard-coded condensed versions, see relevant method, but
+        /// this can be expanded to allow custom definitions of 'condensed' form in the JSON itself
+        /// </remarks>
         public abstract string GetCondensedName();
     }
 
@@ -1235,6 +1325,12 @@ public class IndividualEntrant : Entrant
         }
     }
 
+    /// <summary>
+    /// Constructor for IndividualEntrant if we want them to have a Tag for a name.
+    /// </summary>
+    /// <param name="Id"></param>
+    /// <param name="Tag"></param>
+    /// <param name="data"></param>
     public IndividualEntrant(int Id, string Tag, Dictionary<string, string>? data = null)
     {
         EntrantId = Id;
@@ -1247,6 +1343,12 @@ public class IndividualEntrant : Entrant
         _entrantData = data;
     }
 
+    /// <summary>
+    /// Constructor for IndividualEntrant if we want them to have a FullName for a name.
+    /// </summary>
+    /// <param name="Id"></param>
+    /// <param name="Tag"></param>
+    /// <param name="data"></param>
     public IndividualEntrant(
         int Id,
         string FirstName,
@@ -1265,11 +1367,23 @@ public class IndividualEntrant : Entrant
     }
 }
 
-public class TeamEntrant : Entrant
+/// <summary>
+/// Class representing teams of IndividualEntrants
+/// </summary>
+/// <remarks>
+/// Allows storing data only to relevant to a group of entrants in one place, instead of duplicating it across all of them
+/// </remarks>
+public record class TeamEntrant : Entrant
 {
     public List<IndividualEntrant> IndividualEntrants { get; init; }
     public string? TeamName { get; init; }
 
+    /// <summary>
+    /// Constructor for TeamEntrant where we specify the TeamName.
+    /// </summary>
+    /// <param name="Id"></param>
+    /// <param name="Name"></param>
+    /// <param name="individualEntrants"></param>
     public TeamEntrant(int Id, string? Name, List<IndividualEntrant> individualEntrants)
     {
         EntrantId = Id;
@@ -1277,6 +1391,12 @@ public class TeamEntrant : Entrant
         IndividualEntrants = individualEntrants;
     }
 
+    /// <summary>
+    /// Constructor for TeamEntrant where we don't specify the TeamName.
+    /// </summary>
+    /// <param name="Id"></param>
+    /// <param name="Name"></param>
+    /// <param name="individualEntrants"></param>
     public TeamEntrant(int Id, List<IndividualEntrant> individualEntrants)
     {
         EntrantId = Id;
