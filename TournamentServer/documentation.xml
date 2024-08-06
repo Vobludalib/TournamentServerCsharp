@@ -1,0 +1,539 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>TournamentServer</name>
+    </assembly>
+    <members>
+        <member name="T:TournamentSystem.MyFormatConverter">
+                TODO:
+                   Create an OBF JSON from my format (in progress or finished)
+                   -- Create my format JSON for saving tournament
+                   Serialize select information into my own JSON format for server-sending for API
+                   Allow more JSON options to affect the output
+                    Convert from OBF to my format (more used for reconstructing brackets rather than changing them)
+                    Read my format JSON and load it
+            
+                    Have to create from OBF in multiple steps
+                        Read entrants
+                        Read Sets
+                        Read Games
+                        Update Sets with link
+            *
+        </member>
+        <member name="T:TournamentSystem.Tournament">
+            <summary>
+            Class that stores all the data about the tournament.
+            </summary>
+            <remarks>
+            Nearly all async methods for Tournament handle their own locking.
+            </remarks>
+        </member>
+        <member name="T:TournamentSystem.Tournament.TournamentLockHandler">
+            <summary>
+            Class that is used as a wrapper for locking the seperate parts of the tournament
+            </summary>
+            <remarks>
+            This was originally used for logging purposes, as we can add logging of acquiring locks + report the async nature of it for debugging. This no longer is in the code, but let it be know this was for better logging purposes.
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TournamentLockHandler.LockSetsReadAsync">
+            
+             Each of these methods returns the IDisposable, that when disposed releases the lock. Don't forget to release the lock when not being used.
+            
+             IMPORTANT: For the sake of preventing deadlocks, the following consistent order is used throughout - when expanding ensure you lock in this order:
+             _setLocker
+             _entrantsLocker
+             _dataLocker
+             _statusLocker
+            
+             Failure to do so may lead to deadlock
+            
+        </member>
+        <member name="M:TournamentSystem.Tournament.#ctor">
+            <summary>
+            Default parameterless constructor for Tournament.
+            </summary>
+            <remarks>
+            If you need to create a tournament from existing data - either use looping over the class's methods, or parse in a JSON.
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TryMoveToInProgressAsync">
+            <summary>
+            Method used for finalizing the setup of a tournament.
+            Part of this method is verifying the structure of the tournament is valid (see VerifyStructureAsync for details)
+            </summary>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TryMoveToFinishedAsync">
+            <summary>
+            Method used for moving tournament from InProgress to Finished.
+            </summary>
+            <remarks>There are no complex checks here - this can be expanded in the future, such as checking all sets have a winner/loser.</remarks>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.SetStatus(TournamentSystem.Tournament.TournamentStatus)">
+            <summary>
+            Method used only for JSON conversion - hard override of the tournament status
+            </summary>
+            <remarks>Only to be used in synchronous contexts, this is a hard override and should be used sparingly</remarks>
+            <param name="status"></param>
+        </member>
+        <member name="M:TournamentSystem.Tournament.VerifyStructureAsync">
+            <summary>
+            Method that checks if tournament is of a valid structure. Checks that there are no cycles in the bracket and that each set has the correct amount of set/incoming players.
+            </summary>
+            <returns>Bool - Returns true if structure is valid, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.VerifyAmountOfEntrants">
+            <summary>
+            Method to check that each set has the correct amount of incoming and set entrants (each set should have exactly 2 entrants, with those being able to either be coming from other sets or already be set.
+            </summary>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.VerifyNoCycles">
+            <summary>
+            Method to check that no cycles exist in the bracket.
+            </summary>
+            <remarks>Uses DFS to check for cycles. On a large bracket, this method can be slower than other methods.</remarks>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.AddSetAsync(TournamentSystem.Set)">
+            <summary>
+            Method for adding a Set to the tournament.
+            </summary>
+            <param name="set"></param>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TryRemoveSetAsync(System.Int32)">
+            <summary>
+            Method for removing sets for the tournament (by id).
+            </summary>
+            <param name="id"></param>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TryGetSetAsync(System.Int32)">
+            <summary>
+            Method for retrieving a set from the collection of sets.
+            </summary>
+            <param name="id"></param>
+            <returns>Set? - on success the Set, on fail null</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.AddEntrantAsync(TournamentSystem.Entrant)">
+            <summary>
+            Method for adding an Entrant to the tournament.
+            </summary>
+            <param name="entrant"></param>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TryRemoveEntrantAsync(System.Int32)">
+            <summary>
+            Method for removing entrants for the tournament (by id).
+            </summary>
+            <param name="id"></param>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TryGetEntrantAsync(System.Int32)">
+            <summary>
+            Method for retrieving an entrant from the collection of entrants.
+            </summary>
+            <param name="id"></param>
+            <returns>Entrant? - on success the Entrant, on fail null</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.AddOrEditDataAsync(System.String,System.String)">
+            <summary>
+            Method for adding or editing a specific key value pair of Data. If the key does not yet exist, it is added, otherwise the existing value is just overwritten.
+            </summary>
+            <param name="label"></param>
+            <param name="value"></param>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.DeleteDataAsync(System.String)">
+            <summary>
+            Method for deleting from data. Deletes the key-value pair in the Data dictionary associated with the key.
+            </summary>
+            <param name="key"></param>
+            <returns>Bool - Returns true on success, otherwise false</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.TryGetDataAsync(System.String)">
+            <summary>
+            Method for retrieving a given value from the Data dict by key.
+            </summary>
+            <param name="label"></param>
+            <returns>string? - on success the string, on fail null</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.GetAllDataAsync">
+            <summary>
+            Method for getting the entire Data dict for further processing.
+            </summary>
+            <remarks>
+            The actual returned value is a copy of the Data dict, not a reference to the actual Dict.
+            This is for thread-safety, as we cannot guarantee that the Dict won't change after returning and we don't changes to the Dict to be reflected back into the tournament.
+            </remarks>
+            <returns>Dictionary{string, string} - the Data dictionary</returns>
+        </member>
+        <member name="M:TournamentSystem.Tournament.GetStatusAsync">
+            <summary>
+            Method for getting the status of the tournament.
+            </summary>
+            <remarks>Explicit setting of the status is not allowed (except for JSON deserialization) - use the TryMoveTo... method</remarks>
+            <returns>TournamentStatus - the status of the tournament</returns>
+        </member>
+        <member name="T:TournamentSystem.Set">
+            <summary>
+            Class the represents individual sets in the tournament (each set can be comprised of multiple games).
+            </summary>
+            <remarks>
+            Be careful of which methods expect certain locks to already be locked - not all the lock handling occurs in this class.
+            The properties are all synchronous (as is expected), so use these with caution in async contexts. I have not written async get and set methods, but these might be necessary for fine control.
+            </remarks>
+        </member>
+        <member name="T:TournamentSystem.Set.SetLockHandler">
+            <summary>
+            See Tournament.TournamentLockHandler for explanation why these exist.
+            </summary>
+            <remarks>
+            Note that for sets, I have opted to lock the entire set as a whole, and not individual fields - in most use cases, only one user will be sending requests to read/edit any given set, so it would be too much overhead to have such fine control.
+            This can be changed if it is found that the aforementioned is actually a common usecase.
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.Set.#ctor(System.Int32)">
+            <summary>
+            Constructor for Set given an ID.
+            </summary>
+            <remarks>
+            I only have a constructor with only ID, as the fields will be set later. This is because
+            of the order in which a tournament must be reconstructed from JSON, but also
+            because these fields will change inherently as a tournament progresses. An entrant on the other
+            hand should not change once it is created, as it is immutable.
+            </remarks>
+            <param name="Id"></param>
+        </member>
+        <member name="T:TournamentSystem.Set.IWinnerDecider">
+             <summary>
+             IWinnerDecider is an interface used for specifying custom set-winner conditions.
+            </summary>
+            <remarks>
+             E.g. tennis will have a WinnerDecider that works with the win-by-two condition, while most sports
+             just have a first to X wins condition.
+             </remarks>
+        </member>
+        <member name="T:TournamentSystem.Set.BestOfDecider">
+            <summary>
+            BestOfDecider models the behaviour of a best of X format, where X is specified when created.
+            </summary>
+        </member>
+        <member name="M:TournamentSystem.Set.BestOfDecider.DecideWinner(TournamentSystem.Entrant,TournamentSystem.Entrant,System.Collections.Generic.List{TournamentSystem.Set.Game})">
+            <summary>
+            Method that applies the BestOf rules for to decide a winner (if any), along with handling certain illegal states of the set.
+            </summary>
+            <param name="entrant1"></param>
+            <param name="entrant2"></param>
+            <param name="games"></param>
+            <returns>Entrant? - if a winner is found winning Entrant is returned, otherwise null</returns>
+            <exception cref="T:System.InvalidOperationException"></exception>
+            <exception cref="T:System.NotImplementedException"></exception>
+        </member>
+        <member name="M:TournamentSystem.Set.FillSetFromReport(System.Collections.Generic.Dictionary{System.Int32,TournamentSystem.Set},System.Collections.Generic.IReadOnlyDictionary{System.Int32,TournamentSystem.Entrant},TournamentSystem.MyFormatConverter.SetLinksReport)">
+            <summary>
+            Method used only for JSON conversion - required due to JSON using ID based storage of entrants and sets
+            along with Status and the like being inaccesible from outside the Set class
+            </summary>
+            <param name="sets"></param>
+            <param name="entrants"></param>
+            <param name="report"></param>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="M:TournamentSystem.Set.UpdateSetBasedOnGames">
+             <summary>
+             If a set is InProgress, this method will evaluate whether the games are enough to decide a winner
+             using the provided IWinnerDecider. If a winner is found, Status is set to Finished.
+            
+             This method assumes that the set it is working with is appropriately locked already.
+             </summary>
+             <remarks>
+             This method expects that the set is already locked for writing before the method is called.
+             </remarks>
+             <returns>Bool - true if the set was updated, false on failure or no update</returns>
+             <exception cref="T:System.NullReferenceException"></exception>
+        </member>
+        <member name="M:TournamentSystem.Set.TryMoveToWaitingForStart">
+            <summary>
+            Method that tries to move Set to WaitingForStart, if all entrants and the winnerDecider are set (and we are in a valid state)
+            </summary>
+            <remarks>This method assumes that the set it is working with is appropriately locked for writing already.</remarks>
+            <returns>Bool - true on success, false on failure</returns>
+        </member>
+        <member name="M:TournamentSystem.Set.TryMoveToInProgress">
+            <summary>
+            Method that tries to move Set to InProgress, if all conditions are met (we are in a valid state)
+            </summary>
+            <remarks>This method assumes that the set it is working with is appropriately locked for writing already.</remarks>
+            <returns>Bool - true on success, false on failure</returns>
+        </member>
+        <member name="M:TournamentSystem.Set.TryProgressingWinnerAndLoser">
+            <summary>
+            Method for moving winner and loser to the sets they play in next (if any
+            </summary>
+            <remarks>
+            This method assumes that the set it is working with is appropriately locked already for writing.
+            </remarks>
+            <returns>Bool - true on success, failure on failure or no update</returns>
+        </member>
+        <member name="T:TournamentSystem.Set.Game">
+            <summary>
+            Class representing a single game inside a set
+            </summary>
+        </member>
+        <member name="M:TournamentSystem.Set.Game.#ctor(TournamentSystem.Set,System.Int32,TournamentSystem.Entrant,TournamentSystem.Entrant,System.Collections.Generic.Dictionary{System.String,System.String})">
+            <summary>
+            Normal constructor for Game - we let Status and Winner be decided by the constructor
+            </summary>
+            <param name="ParentSet"></param>
+            <param name="GameNumber"></param>
+            <param name="Entrant1"></param>
+            <param name="Entrant2"></param>
+            <param name="Data"></param>
+        </member>
+        <member name="M:TournamentSystem.Set.Game.#ctor(TournamentSystem.Set,System.Int32,TournamentSystem.Entrant,TournamentSystem.Entrant,TournamentSystem.Entrant,TournamentSystem.Set.Game.GameStatus,System.Collections.Generic.Dictionary{System.String,System.String})">
+            <summary>
+            Constructor for Game used when deserializing JSON when we already know the Winner and Status
+            </summary>
+            <remarks>
+            Do not use unless you have a good reason to.
+            </remarks>
+            <param name="ParentSet"></param>
+            <param name="GameNumber"></param>
+            <param name="Entrant1"></param>
+            <param name="Entrant2"></param>
+            <param name="Winner"></param>
+            <param name="Status"></param>
+            <param name="Data"></param>
+        </member>
+        <member name="M:TournamentSystem.Set.Game.TryMovingToWaitingAsync">
+            <summary>
+            Method to move from InProgress to Waiting - should only be used to roll-back misclicks. Returns true if succesful, otherwise false.
+            </summary>
+            <remarks>Locking handled in the method - no expectations on other locks</remarks>
+            <returns>Bool - true on success, false on failure</returns>
+        </member>
+        <member name="M:TournamentSystem.Set.Game.TryMovingToInProgressAsync">
+            <summary>
+            Method to move from Waiting to InProgress.
+            </summary>
+            <remarks>Locking handled in the method - no expectations on other locks</remarks>
+            <returns>Bool - true if succesful, otherwise false.</returns>
+        </member>
+        <member name="M:TournamentSystem.Set.Game.SetWinnerAsync(TournamentSystem.Entrant)">
+            <summary>
+            Method for setting the winner of the Game - contains checks to ensure the "Winner" is part of the Game.
+            </summary>
+            <param name="winner"></param>
+            <exception cref="T:System.InvalidOperationException"></exception>
+        </member>
+        <member name="M:TournamentSystem.Set.Game.SetStatus(TournamentSystem.Set.Game.GameStatus)">
+            <summary>
+            Overrides the checks - DO NOT USE UNLESS YOU ARE LOADING A GAME FROM SOMEWHERE
+            </summary>
+            <param name="status"></param>
+        </member>
+        <member name="T:TournamentSystem.Entrant">
+            <summary>
+            Class that represents the idea of an entrant of the tournament
+            </summary>
+            <remarks>This class is meant to be immutable - once an entrant is created, to edit it we have to create a new one that copies from the old one.</remarks>
+        </member>
+        <member name="F:TournamentSystem.Entrant._entrantData">
+            <remarks>
+            This is a dictionary, as we don't have a set promise from the JSON as to what information
+            can or can't be included, instead we just store directly from the JSON and any parsing is done
+            when required
+            </remarks>
+        </member>
+        <member name="T:TournamentSystem.IndividualEntrant">
+            <summary>
+            Represents an individual person entering the tournament
+            </summary>
+        </member>
+        <member name="P:TournamentSystem.IndividualEntrant.EntrantName">
+            <remarks>
+            This is kept as an EntrantName type - this is because I allow the JSON to specify the info
+            firstName, lastName if you want to store them seperately, or just tag for a single string.
+            </remarks>
+        </member>
+        <member name="T:TournamentSystem.IndividualEntrant.Name">
+            <summary>
+            Class representing a Name - either can be a normal 'person's' name (first name, last name) or a tag (i.e. pseudonyms - common in esports)
+            </summary>
+        </member>
+        <member name="M:TournamentSystem.IndividualEntrant.Name.GetCondensedName">
+            <remarks>
+            For now, we do hard-coded condensed versions, see relevant method, but
+            this can be expanded to allow custom definitions of 'condensed' form in the JSON itself
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.IndividualEntrant.#ctor(System.Int32,System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+            <summary>
+            Constructor for IndividualEntrant if we want them to have a Tag for a name.
+            </summary>
+            <param name="Id"></param>
+            <param name="Tag"></param>
+            <param name="data"></param>
+        </member>
+        <member name="M:TournamentSystem.IndividualEntrant.#ctor(System.Int32,System.String,System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+            <summary>
+            Constructor for IndividualEntrant if we want them to have a FullName for a name.
+            </summary>
+            <param name="Id"></param>
+            <param name="Tag"></param>
+            <param name="data"></param>
+        </member>
+        <member name="T:TournamentSystem.TeamEntrant">
+            <summary>
+            Class representing teams of IndividualEntrants
+            </summary>
+            <remarks>
+            Allows storing data only to relevant to a group of entrants in one place, instead of duplicating it across all of them
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.TeamEntrant.#ctor(System.Int32,System.String,System.Collections.Generic.List{TournamentSystem.IndividualEntrant})">
+            <summary>
+            Constructor for TeamEntrant where we specify the TeamName.
+            </summary>
+            <param name="Id"></param>
+            <param name="Name"></param>
+            <param name="individualEntrants"></param>
+        </member>
+        <member name="M:TournamentSystem.TeamEntrant.#ctor(System.Int32,System.Collections.Generic.List{TournamentSystem.IndividualEntrant})">
+            <summary>
+            Constructor for TeamEntrant where we don't specify the TeamName.
+            </summary>
+            <param name="Id"></param>
+            <param name="Name"></param>
+            <param name="individualEntrants"></param>
+        </member>
+        <member name="M:TournamentServer.Main(System.String[])">
+            <summary>
+            Allows passing of one command line argument - that being the path of the JSON of the tournament to load on startup.
+            </summary>
+            <param name="args"></param>
+            <exception cref="T:System.ArgumentException"></exception>
+        </member>
+        <member name="T:TournamentServer.ServerHandler">
+            <summary>
+            Class that handles processing requests and locking across class boundaries
+            </summary>
+            <remarks>
+            This can almost surely be made in a more elegant way, but this works for now.
+            </remarks>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.GetTournamentAsync">
+            <summary>
+            Handles requests for the JSON of the whole tournament.
+            </summary>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.GetSetByIdAsync(System.Int32)">
+            <summary>
+            Handles requests for a specific Set, searching sets by id. Returns a serialized JSON of just the set.
+            </summary>
+            <param name="id"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.GetEntrantByIdAsync(System.Int32)">
+            <summary>
+            Handles requests for a specific Entrant, searching entrants by id. Returns a serialized JSON of just the entrant.
+            </summary>
+            <remarks>
+            TeamEntrants are serialized such that the contained IndividualEntrants are nested and also serialized.
+            </remarks>
+            <param name="id"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.GetAllDataAsync">
+            <summary>
+            Handles requests for the entire Data dictionary. Returns serialized JSON.
+            </summary>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.GetDataByKeyAsync(System.String)">
+            <summary>
+            Handles requests for a specific key-value pair in Data, searching by key. Returns serialized JSON.
+            </summary>
+            <param name="key"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.GetStatusAsync">
+            <summary>
+            Handles requests for the status of the tournament. Returns serialized JSON.
+            </summary>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.HandleTournamentPostAsync(Microsoft.AspNetCore.Http.HttpContext)">
+            <summary>
+            Handles a full JSON of a tournament, that is to be parsed and used as the current tournament.
+            </summary>
+            <param name="context"></param>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.HandleTournamentStatusTransitionAsync(System.String)">
+            <summary>
+            Handles requests for transitioning tournament betweens states.
+            </summary>
+            <param name="transitionTo"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.HandleGamePostAsync(System.Int32,Microsoft.AspNetCore.Http.HttpContext)">
+            <summary>
+            Handles requests that send a JSON serialized Game objecct and want it to be added to a given set (by id).
+            </summary>
+            <remarks>
+            Handles locking across class boundaries.S
+            </remarks>
+            <param name="setId"></param>
+            <param name="context"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.UpdateSetBasedOnGamesAsync(System.Int32)">
+            <summary>
+            Handles requests that requests a set to be evaluated based on the state of its games (and find winner/loser).
+            </summary>
+            <remarks>
+            Handles locking across class boundaries.
+            </remarks>
+            <param name="setId"></param>
+            <param name="context"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.HandleSetStatusTransitionAsync(System.Int32,System.String)">
+            <summary>
+            Handles requests to transition a Set (by id) between states.
+            </summary>
+            <remarks>
+            Handles locking across class boundaries.
+            </remarks>
+            <param name="setId"></param>
+            <param name="transitionTo"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.HandleSetMoveWinnersAndLoserAsync(System.Int32)">
+            <summary>
+            Handles requests to move the winner and loser from a given set (by id) to the next set they play.
+            </summary>
+            <remarks>
+            Handles locking across class boundaries.
+            </remarks>
+            <param name="setId"></param>
+            <param name="transitionTo"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.HandleGameStatusTransitionAsync(System.Int32,System.Int32,System.String)">
+            <summary>
+            Handles requests to transition a game (by number) of a set (by id) between states.
+            </summary>
+            <remarks>
+            Handles locking across class boundaries.
+            </remarks>
+            <param name="setId"></param>
+            <param name="transitionTo"></param>
+        </member>
+        <member name="M:TournamentServer.ServerHandler.HandleGameUpdateWinnerAsync(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Handles requests to set the winner (passed as entrantId) of a game (by number) of a set (by id).
+            </summary>
+            <remarks>
+            Handles locking across class boundaries.
+            </remarks>
+            <param name="setId"></param>
+            <param name="transitionTo"></param>
+        </member>
+    </members>
+</doc>
