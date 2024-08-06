@@ -7,6 +7,11 @@ using TournamentSystem;
 
 class TournamentServer()
 {
+    /// <summary>
+    /// Allows passing of one command line argument - that being the path of the JSON of the tournament to load on startup.
+    /// </summary>
+    /// <param name="args"></param>
+    /// <exception cref="ArgumentException"></exception>
     public static void Main(String[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +26,6 @@ class TournamentServer()
         };
 
         app.MapGet("/", redirect);
-
         app.MapGet("/tournament", () => sh.GetTournamentAsync());
         app.MapPost(
             "/tournament",
@@ -91,6 +95,12 @@ class TournamentServer()
         app.Run();
     }
 
+    /// <summary>
+    /// Class that handles processing requests and locking across class boundaries
+    /// </summary>
+    /// <remarks>
+    /// This can almost surely be made in a more elegant way, but this works for now.
+    /// </remarks>
     public class ServerHandler
     {
         public MyFormatConverter myFormatConverter;
@@ -109,6 +119,9 @@ class TournamentServer()
             gameLinksConverter = new();
         }
 
+        /// <summary>
+        /// Handles requests for the JSON of the whole tournament.
+        /// </summary>
         public async Task<IResult> GetTournamentAsync()
         {
             if (tournament is null)
@@ -151,6 +164,10 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests for a specific Set, searching sets by id. Returns a serialized JSON of just the set.
+        /// </summary>
+        /// <param name="id"></param>
         public async Task<IResult> GetSetByIdAsync(int id)
         {
             if (tournament is null)
@@ -176,6 +193,13 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests for a specific Entrant, searching entrants by id. Returns a serialized JSON of just the entrant.
+        /// </summary>
+        /// <remarks>
+        /// TeamEntrants are serialized such that the contained IndividualEntrants are nested and also serialized.
+        /// </remarks>
+        /// <param name="id"></param>
         public async Task<IResult> GetEntrantByIdAsync(int id)
         {
             if (tournament is null)
@@ -199,6 +223,9 @@ class TournamentServer()
             return Results.Content(json, "application/json");
         }
 
+        /// <summary>
+        /// Handles requests for the entire Data dictionary. Returns serialized JSON.
+        /// </summary>
         public async Task<IResult> GetAllDataAsync()
         {
             if (tournament is null)
@@ -214,6 +241,10 @@ class TournamentServer()
             return Results.Content(json, "application/json");
         }
 
+        /// <summary>
+        /// Handles requests for a specific key-value pair in Data, searching by key. Returns serialized JSON.
+        /// </summary>
+        /// <param name="key"></param>
         public async Task<IResult> GetDataByKeyAsync(string key)
         {
             if (tournament is null)
@@ -233,6 +264,9 @@ class TournamentServer()
             return Results.Content(json, "application/json");
         }
 
+        /// <summary>
+        /// Handles requests for the status of the tournament. Returns serialized JSON.
+        /// </summary>
         public async Task<IResult> GetStatusAsync()
         {
             if (tournament is null)
@@ -252,6 +286,11 @@ class TournamentServer()
             return Results.Content(json, "application/json");
         }
 
+        /// <summary>
+        /// Handles a full JSON of a tournament, that is to be parsed and used as the current tournament.
+        /// </summary>
+        /// <param name="context"></param>
+        /// <exception cref="JsonException"></exception>
         public async Task<IResult> HandleTournamentPostAsync(HttpContext context)
         {
             using (StreamReader reader = new StreamReader(context.Request.Body, Encoding.UTF8))
@@ -271,6 +310,10 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests for transitioning tournament betweens states.
+        /// </summary>
+        /// <param name="transitionTo"></param>
         public async Task<IResult> HandleTournamentStatusTransitionAsync(string transitionTo)
         {
             if (tournament is null)
@@ -302,6 +345,14 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests that send a JSON serialized Game objecct and want it to be added to a given set (by id).
+        /// </summary>
+        /// <remarks>
+        /// Handles locking across class boundaries.S
+        /// </remarks>
+        /// <param name="setId"></param>
+        /// <param name="context"></param>
         public async Task<IResult> HandleGamePostAsync(int setId, HttpContext context)
         {
             if (tournament is null)
@@ -399,6 +450,14 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests that requests a set to be evaluated based on the state of its games (and find winner/loser).
+        /// </summary>
+        /// <remarks>
+        /// Handles locking across class boundaries.
+        /// </remarks>
+        /// <param name="setId"></param>
+        /// <param name="context"></param>
         public async Task<IResult> UpdateSetBasedOnGamesAsync(int setId)
         {
             if (tournament is null)
@@ -438,6 +497,14 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests to transition a Set (by id) between states.
+        /// </summary>
+        /// <remarks>
+        /// Handles locking across class boundaries.
+        /// </remarks>
+        /// <param name="setId"></param>
+        /// <param name="transitionTo"></param>
         public async Task<IResult> HandleSetStatusTransitionAsync(int setId, string transitionTo)
         {
             if (tournament is null)
@@ -481,6 +548,14 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests to move the winner and loser from a given set (by id) to the next set they play.
+        /// </summary>
+        /// <remarks>
+        /// Handles locking across class boundaries.
+        /// </remarks>
+        /// <param name="setId"></param>
+        /// <param name="transitionTo"></param>
         public async Task<IResult> HandleSetMoveWinnersAndLoserAsync(int setId)
         {
             if (tournament is null)
@@ -529,6 +604,14 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests to transition a game (by number) of a set (by id) between states.
+        /// </summary>
+        /// <remarks>
+        /// Handles locking across class boundaries.
+        /// </remarks>
+        /// <param name="setId"></param>
+        /// <param name="transitionTo"></param>
         public async Task<IResult> HandleGameStatusTransitionAsync(
             int setId,
             int gameNumber,
@@ -584,6 +667,14 @@ class TournamentServer()
             }
         }
 
+        /// <summary>
+        /// Handles requests to set the winner (passed as entrantId) of a game (by number) of a set (by id).
+        /// </summary>
+        /// <remarks>
+        /// Handles locking across class boundaries.
+        /// </remarks>
+        /// <param name="setId"></param>
+        /// <param name="transitionTo"></param>
         public async Task<IResult> HandleGameUpdateWinnerAsync(
             int setId,
             int gameNumber,
