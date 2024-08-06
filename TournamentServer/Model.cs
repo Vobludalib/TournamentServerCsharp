@@ -5,6 +5,9 @@ using Nito.AsyncEx;
 
 namespace TournamentSystem;
 
+/// <summary>
+/// Class that stores all the data about the tournament
+/// </summary>
 public class Tournament
 {
     private Dictionary<int, Set> _sets { get; set; }
@@ -27,12 +30,30 @@ public class Tournament
         Finished
     }
 
+    /// <summary>
+    /// Class that is used as a wrapper for locking the seperate parts of the tournament
+    /// </summary>
+    /// <remarks>
+    /// This was originally used for logging purposes, as we can add logging of acquiring locks + report the async nature of it for debugging. This no longer is in the code, but let it be know this was for better logging purposes.
+    /// </remarks>
     public class TournamentLockHandler
     {
         private AsyncReaderWriterLock _setLocker = new();
         private AsyncReaderWriterLock _entrantsLocker = new();
         private AsyncReaderWriterLock _dataLocker = new();
         private AsyncReaderWriterLock _statusLocker = new();
+
+        ///
+        /// Each of these methods returns the IDisposable, that when disposed releases the lock. Don't forget to release the lock when not being used.
+        ///
+        /// IMPORTANT: For the sake of preventing deadlocks, the following consistent order is used throughout - when expanding ensure you lock in this order:
+        /// _setLocker
+        /// _entrantsLocker
+        /// _dataLocker
+        /// _statusLocker
+        ///
+        /// Failure to do so may lead to deadlock
+        ///
 
         public async Task<IDisposable> LockSetsReadAsync()
         {
@@ -83,6 +104,12 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Default parameterless constructor for Tournament.
+    /// </summary>
+    /// <remarks>
+    /// If you need to create a tournament from existing data - either use looping over the class's methods, or parse in a JSON.
+    /// </remarks>
     public Tournament()
     {
         _sets = new Dictionary<int, Set>();
@@ -93,10 +120,10 @@ public class Tournament
     }
 
     /// <summary>
-    /// This method is used for finalizing the setup of a tournament. Returns true on success, otherwise false.
-    /// Part of this method is verifying the structure of the tournament is valid.
+    /// Method used for finalizing the setup of a tournament.
+    /// Part of this method is verifying the structure of the tournament is valid (see VerifyStructureAsync for details)
     /// </summary>
-    /// <returns></returns>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> TryMoveToInProgressAsync()
     {
         using (IDisposable statusLock = await _lockHandler.LockStatusReadAsync())
@@ -122,6 +149,11 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method used for moving tournament from InProgress to Finished.
+    /// </summary>
+    /// <remarks>There are no complex checks here - this can be expanded in the future, such as checking all sets have a winner/loser.</remarks>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> TryMoveToFinishedAsync()
     {
         // Writer lock is exclusive, so we can also read safely
@@ -137,12 +169,17 @@ public class Tournament
     /// <summary>
     /// Method used only for JSON conversion - hard override of the tournament status
     /// </summary>
+    /// <remarks>Only to be used in synchronous contexts, this is a hard override and should be used sparingly</remarks>
     /// <param name="status"></param>
     internal void SetStatus(TournamentStatus status)
     {
         _status = status;
     }
 
+    /// <summary>
+    /// Method that checks if tournament is of a valid structure. Checks that there are no cycles in the bracket and that each set has the correct amount of set/incoming players.
+    /// </summary>
+    /// <returns>Bool - Returns true if structure is valid, otherwise false</returns>
     internal async Task<bool> VerifyStructureAsync()
     {
         // Acquire locks of every set, locking sets and entrants dictionaries and status should be already locked
@@ -182,6 +219,10 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method to check that each set has the correct amount of incoming and set entrants (each set should have exactly 2 entrants, with those being able to either be coming from other sets or already be set.
+    /// </summary>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     private bool VerifyAmountOfEntrants()
     {
         Dictionary<Set, int> amountOfEntrants = new();
@@ -206,6 +247,11 @@ public class Tournament
         return true;
     }
 
+    /// <summary>
+    /// Method to check that no cycles exist in the bracket.
+    /// </summary>
+    /// <remarks>Uses DFS to check for cycles. On a large bracket, this method can be slower than other methods.</remarks>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     private bool VerifyNoCycles()
     {
         Dictionary<int, List<int>> adjacents = new();
@@ -277,7 +323,7 @@ public class Tournament
     /// Method for adding a Set to the tournament.
     /// </summary>
     /// <param name="set"></param>
-    /// <returns></returns>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> AddSetAsync(Set set)
     {
         using (var statusLock = await _lockHandler.LockStatusReadAsync())
@@ -287,26 +333,19 @@ public class Tournament
 
             using (var setLock = await _lockHandler.LockSetsWriteAsync())
             {
-                try
-                {
-                    if (_sets.Keys.Contains(set.SetId))
-                        return false;
-                    _sets.Add(set.SetId, set);
-                    return true;
-                }
-                catch
-                {
+                if (_sets.Keys.Contains(set.SetId))
                     return false;
-                }
+                _sets.Add(set.SetId, set);
+                return true;
             }
         }
     }
 
     /// <summary>
-    /// Method for removing sets for the tournament (by id). Returns true on success, otherwise false
+    /// Method for removing sets for the tournament (by id).
     /// </summary>
     /// <param name="id"></param>
-    /// <returns></returns>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> TryRemoveSetAsync(int id)
     {
         using (var statusLock = await _lockHandler.LockStatusReadAsync())
@@ -326,6 +365,11 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method for retrieving a set from the collection of sets.
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns>Set? - on success the Set, on fail null</returns>
     public async Task<Set?> TryGetSetAsync(int id)
     {
         using (var setLock = await _lockHandler.LockSetsReadAsync())
@@ -337,6 +381,11 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method for adding an Entrant to the tournament.
+    /// </summary>
+    /// <param name="entrant"></param>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> AddEntrantAsync(Entrant entrant)
     {
         var statusLock = await _lockHandler.LockStatusReadAsync();
@@ -362,10 +411,10 @@ public class Tournament
     }
 
     /// <summary>
-    /// Method for removing entrants for the tournament (by id). Returns true on success, otherwise false
+    /// Method for removing entrants for the tournament (by id).
     /// </summary>
     /// <param name="id"></param>
-    /// <returns></returns>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> TryRemoveEntrantAsync(int id)
     {
         using (var statusLock = await _lockHandler.LockStatusReadAsync())
@@ -392,6 +441,11 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method for retrieving an entrant from the collection of entrants.
+    /// </summary>
+    /// <param name="id"></param>
+    /// <returns>Entrant? - on success the Entrant, on fail null</returns>
     public async Task<Entrant?> TryGetEntrantAsync(int id)
     {
         using (var entrantLock = await _lockHandler.LockEntrantsReadAsync())
@@ -405,11 +459,10 @@ public class Tournament
 
     /// <summary>
     /// Method for adding or editing a specific key value pair of Data. If the key does not yet exist, it is added, otherwise the existing value is just overwritten.
-    /// Returns true on a success, otherwise false.
     /// </summary>
     /// <param name="label"></param>
     /// <param name="value"></param>
-    /// <returns></returns>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> AddOrEditDataAsync(string label, string value)
     {
         using (var statusLock = await _lockHandler.LockStatusReadAsync())
@@ -438,11 +491,11 @@ public class Tournament
     }
 
     /// <summary>
-    /// Method for deleting from data. Return true on success, otherwise false.
+    /// Method for deleting from data. Deletes the key-value pair in the Data dictionary associated with the key.
     /// </summary>
-    /// <param name="label"></param>
-    /// <returns></returns>
-    public async Task<bool> DeleteDataAsync(string label)
+    /// <param name="key"></param>
+    /// <returns>Bool - Returns true on success, otherwise false</returns>
+    public async Task<bool> DeleteDataAsync(string key)
     {
         using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
@@ -453,9 +506,9 @@ public class Tournament
             {
                 try
                 {
-                    if (_data.ContainsKey(label))
+                    if (_data.ContainsKey(key))
                     {
-                        _data.Remove(label);
+                        _data.Remove(key);
                         return true;
                     }
                     else
@@ -471,6 +524,11 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method for retrieving a given value from the Data dict by key.
+    /// </summary>
+    /// <param name="label"></param>
+    /// <returns>string? - on success the string, on fail null</returns>
     public async Task<string?> TryGetDataAsync(string label)
     {
         using (var dataLock = await _lockHandler.LockDataReadAsync())
@@ -482,6 +540,14 @@ public class Tournament
         }
     }
 
+    /// <summary>
+    /// Method for getting the entire Data dict for further processing.
+    /// </summary>
+    /// <remarks>
+    /// The actual returned value is a copy of the Data dict, not a reference to the actual Dict.
+    /// This is for thread-safety, as we cannot guarantee that the Dict won't change after returning and we don't changes to the Dict to be reflected back into the tournament.
+    /// </remarks>
+    /// <returns>Dictionary{string, string} - the Data dictionary</returns>
     public async Task<Dictionary<string, string>> GetAllDataAsync()
     {
         // We have to clone the dict and create a snapshot at the time, so we can free up the lock while ensuring the dict does not change after this method returns.
@@ -498,6 +564,11 @@ public class Tournament
         return clonedDict;
     }
 
+    /// <summary>
+    /// Method for getting the status of the tournament.
+    /// </summary>
+    /// <remarks>Explicit setting of the status is not allowed (except for JSON deserialization) - use the TryMoveTo... method</remarks>
+    /// <returns>TournamentStatus - the status of the tournament</returns>
     public async Task<TournamentStatus> GetStatusAsync()
     {
         using (var statusLock = await _lockHandler.LockStatusReadAsync())
