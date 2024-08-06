@@ -115,41 +115,39 @@ class TournamentServer()
             {
                 return Results.BadRequest("No tournament exists");
             }
-            var setLock = await tournament.LockHandler.LockSetsReadAsync();
-            var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync();
-            var dataLock = await tournament.LockHandler.LockDataReadAsync();
-            var statusLock = await tournament.LockHandler.LockStatusReadAsync();
-            var allSets = tournament.Sets.Values.ToList();
-            // Sorting by setId to guarantee consistent locking order
-            allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
-            List<IDisposable> setLocks = new();
-            foreach (Set set in allSets)
+            using (var setLock = await tournament.LockHandler.LockSetsReadAsync())
+            using (var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync())
+            using (var dataLock = await tournament.LockHandler.LockDataReadAsync())
+            using (var statusLock = await tournament.LockHandler.LockStatusReadAsync())
             {
-                setLocks.Add(await set.LockHandler.LockSetReadAsync());
-            }
-            try
-            {
-                var json = JsonSerializer.Serialize(
-                    tournament,
-                    new JsonSerializerOptions()
-                    {
-                        Converters = { myFormatConverter },
-                        WriteIndented = true
-                    }
-                );
-                return Results.Content(json, "application/json");
-            }
-            finally
-            {
-                setLocks.Reverse();
-                foreach (var lockToUnlock in setLocks)
+                var allSets = tournament.Sets.Values.ToList();
+                // Sorting by setId to guarantee consistent locking order
+                allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
+                List<IDisposable> setLocks = new();
+                foreach (Set set in allSets)
                 {
-                    lockToUnlock.Dispose();
+                    setLocks.Add(await set.LockHandler.LockSetReadAsync());
                 }
-                tournament.LockHandler.UnlockStatusLock(statusLock);
-                tournament.LockHandler.UnlockDataLock(dataLock);
-                tournament.LockHandler.UnlockEntrantsLock(entrantsLock);
-                tournament.LockHandler.UnlockSetsLock(setLock);
+                try
+                {
+                    var json = JsonSerializer.Serialize(
+                        tournament,
+                        new JsonSerializerOptions()
+                        {
+                            Converters = { myFormatConverter },
+                            WriteIndented = true
+                        }
+                    );
+                    return Results.Content(json, "application/json");
+                }
+                finally
+                {
+                    setLocks.Reverse();
+                    foreach (var lockToUnlock in setLocks)
+                    {
+                        lockToUnlock.Dispose();
+                    }
+                }
             }
         }
 
@@ -310,8 +308,7 @@ class TournamentServer()
             {
                 return Results.BadRequest("No tournament exists");
             }
-            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
-            try
+            using (var setsLock = await tournament.LockHandler.LockSetsReadAsync())
             {
                 var setToTieTo = await tournament.TryGetSetAsync(setId);
                 if (setToTieTo is null)
@@ -400,10 +397,6 @@ class TournamentServer()
                     }
                 }
             }
-            finally
-            {
-                tournament.LockHandler.UnlockSetsLock(setsLock);
-            }
         }
 
         public async Task<IResult> UpdateSetBasedOnGamesAsync(int setId)
@@ -412,8 +405,7 @@ class TournamentServer()
             {
                 return Results.BadRequest("No tournament exists");
             }
-            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
-            try
+            using (var setsLock = await tournament.LockHandler.LockSetsReadAsync())
             {
                 var set = await tournament.TryGetSetAsync(setId);
                 if (set is null)
@@ -444,10 +436,6 @@ class TournamentServer()
                     }
                 }
             }
-            finally
-            {
-                tournament.LockHandler.UnlockSetsLock(setsLock);
-            }
         }
 
         public async Task<IResult> HandleSetStatusTransitionAsync(int setId, string transitionTo)
@@ -456,8 +444,7 @@ class TournamentServer()
             {
                 return Results.BadRequest("No tournament exists");
             }
-            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
-            try
+            using (var setsLock = await tournament.LockHandler.LockSetsReadAsync())
             {
                 var set = await tournament.TryGetSetAsync(setId);
                 if (set is null)
@@ -492,10 +479,6 @@ class TournamentServer()
                     }
                 }
             }
-            finally
-            {
-                tournament.LockHandler.UnlockSetsLock(setsLock);
-            }
         }
 
         public async Task<IResult> HandleSetMoveWinnersAndLoserAsync(int setId)
@@ -504,9 +487,8 @@ class TournamentServer()
             {
                 return Results.BadRequest("No tournament exists");
             }
-            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
-            var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync();
-            try
+            using (var setsLock = await tournament.LockHandler.LockSetsReadAsync())
+            using (var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync())
             {
                 var set = await tournament.TryGetSetAsync(setId);
                 if (set is null)
@@ -545,11 +527,6 @@ class TournamentServer()
                     }
                 }
             }
-            finally
-            {
-                tournament.LockHandler.UnlockEntrantsLock(entrantsLock);
-                tournament.LockHandler.UnlockSetsLock(setsLock);
-            }
         }
 
         public async Task<IResult> HandleGameStatusTransitionAsync(
@@ -562,8 +539,7 @@ class TournamentServer()
             {
                 return Results.BadRequest("No tournament exists");
             }
-            var setsLock = await tournament.LockHandler.LockSetsReadAsync();
-            try
+            using (var setsLock = await tournament.LockHandler.LockSetsReadAsync())
             {
                 var set = await tournament.TryGetSetAsync(setId);
                 if (set is null)
@@ -606,10 +582,6 @@ class TournamentServer()
                     }
                 }
             }
-            finally
-            {
-                tournament.LockHandler.UnlockSetsLock(setsLock);
-            }
         }
 
         public async Task<IResult> HandleGameUpdateWinnerAsync(
@@ -623,9 +595,8 @@ class TournamentServer()
                 {
                     return Results.BadRequest("No tournament exists");
                 }
-                var setsLock = await tournament.LockHandler.LockSetsReadAsync();
-                var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync();
-                try
+                using (var setsLock = await tournament.LockHandler.LockSetsReadAsync())
+                using (var entrantsLock = await tournament.LockHandler.LockEntrantsReadAsync())
                 {
                     var set = await tournament.TryGetSetAsync(setId);
                     if (set is null)
@@ -659,11 +630,6 @@ class TournamentServer()
                         await game.SetWinnerAsync(entrant);
                         return Results.Ok("Winner was set");
                     }
-                }
-                finally
-                {
-                    tournament.LockHandler.UnlockEntrantsLock(entrantsLock);
-                    tournament.LockHandler.UnlockSetsLock(setsLock);
                 }
             }
         }
