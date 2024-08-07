@@ -1,0 +1,8 @@
+var searchData=
+[
+  ['incompletesetup_0',['IncompleteSetup',['../class_tournament_system_1_1_set.html#ae55fac0a2f0c2596a516708e09fb632aa561360942ddc6c0b08f2916a250bca10',1,'TournamentSystem::Set']]],
+  ['individualentrant_1',['IndividualEntrant',['../class_tournament_system_1_1_individual_entrant.html',1,'TournamentSystem.IndividualEntrant'],['../class_tournament_system_1_1_individual_entrant.html#a31c55d7a85132cd9933e852a89cc8925',1,'TournamentSystem.IndividualEntrant.IndividualEntrant(int Id, string Tag, Dictionary&lt; string, string &gt;? data=null)'],['../class_tournament_system_1_1_individual_entrant.html#aceb8b84305f0dafb728007e4245d4e2a',1,'TournamentSystem.IndividualEntrant.IndividualEntrant(int Id, string FirstName, string LastName, Dictionary&lt; string, string &gt;? data=null)']]],
+  ['individualentrants_2',['IndividualEntrants',['../class_tournament_system_1_1_team_entrant.html#ac8a05f7c7bbfdbfdc70a3e2300fd0f81',1,'TournamentSystem::TeamEntrant']]],
+  ['inprogress_3',['InProgress',['../class_tournament_system_1_1_tournament.html#ad62403f586da88915a1bae28427dc73fa12d868c18cb29bf58f02b504be9033fd',1,'TournamentSystem.Tournament.InProgress'],['../class_tournament_system_1_1_set.html#ae55fac0a2f0c2596a516708e09fb632aa12d868c18cb29bf58f02b504be9033fd',1,'TournamentSystem.Set.InProgress'],['../class_tournament_system_1_1_set_1_1_game.html#aba883a05bf2cae1dd2fad1d3b62a7cd4a12d868c18cb29bf58f02b504be9033fd',1,'TournamentSystem.Set.Game.InProgress']]],
+  ['iwinnerdecider_4',['IWinnerDecider',['../interface_tournament_system_1_1_set_1_1_i_winner_decider.html',1,'TournamentSystem::Set']]]
+];

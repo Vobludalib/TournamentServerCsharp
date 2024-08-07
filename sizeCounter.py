@@ -7,7 +7,7 @@ for dirpath, dirnames, filenames in os.walk("."):
         if file.endswith(".cs"):
             p = os.path.join(dirpath, file)
             with open(p, "r") as f:
-                if r"///Countable" in f.read(20):
+                if r"//Countable" in f.read(20):
                     stats = os.stat(p)
                     size = size + stats.st_size / 1024
                     print(f"File {p}: {stats.st_size / 1024 :.2g} KiB, so far at: {size :.2g} KiB")

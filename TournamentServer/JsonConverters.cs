@@ -1,4 +1,4 @@
-///Countable
+//Countable
 
 using System.Data;
 using System.Reflection;
@@ -740,8 +740,8 @@ public class GameLinksConverter : JsonConverter<MyFormatConverter.GameLinksRepor
     /// <summary>
     /// Not implemented - you should be serializing Game objects, not GameLinksReport objects.
     /// </summary>
-    /// <param name="reader"></param>
-    /// <param name="typeToConvert"></param>
+    /// <param name="writer"></param>
+    /// <param name="value"></param>
     /// <param name="options"></param>
     public override void Write(
         Utf8JsonWriter writer,
