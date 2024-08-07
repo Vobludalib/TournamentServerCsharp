@@ -22,8 +22,7 @@ var hierarchy =
       [ "TournamentSystem.IndividualEntrant.FullName", "class_tournament_system_1_1_individual_entrant_1_1_full_name.html", null ],
       [ "TournamentSystem.IndividualEntrant.Tag", "class_tournament_system_1_1_individual_entrant_1_1_tag.html", null ]
     ] ],
-    [ "Program", "class_program.html", null ],
-    [ "ServerHandler", "class_server_handler.html", null ],
+    [ "TournamentSystem.ServerHandler", "class_tournament_system_1_1_server_handler.html", null ],
     [ "TournamentSystem.Set", "class_tournament_system_1_1_set.html", null ],
     [ "TournamentSystem.MyFormatConverter.SetLinksReport", "class_tournament_system_1_1_my_format_converter_1_1_set_links_report.html", null ],
     [ "TournamentSystem.Set.SetLockHandler", "class_tournament_system_1_1_set_1_1_set_lock_handler.html", null ],

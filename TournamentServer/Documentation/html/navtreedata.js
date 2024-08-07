@@ -53,7 +53,7 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "_json_converters_8cs.html",
-"class_tournament_system_1_1_set_winner_decider_converter.html#acb3a97bdbb3d7dc0e045b747c7b49c4e"
+"class_tournament_system_1_1_set_links_converter.html#a2f4453ebd9b6c470cedfc0fe6d745926"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

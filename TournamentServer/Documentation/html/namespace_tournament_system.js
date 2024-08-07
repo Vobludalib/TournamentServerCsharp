@@ -6,6 +6,7 @@ var namespace_tournament_system =
     [ "GameLinksConverter", "class_tournament_system_1_1_game_links_converter.html", "class_tournament_system_1_1_game_links_converter" ],
     [ "IndividualEntrant", "class_tournament_system_1_1_individual_entrant.html", "class_tournament_system_1_1_individual_entrant" ],
     [ "MyFormatConverter", "class_tournament_system_1_1_my_format_converter.html", "class_tournament_system_1_1_my_format_converter" ],
+    [ "ServerHandler", "class_tournament_system_1_1_server_handler.html", "class_tournament_system_1_1_server_handler" ],
     [ "Set", "class_tournament_system_1_1_set.html", "class_tournament_system_1_1_set" ],
     [ "SetConverter", "class_tournament_system_1_1_set_converter.html", "class_tournament_system_1_1_set_converter" ],
     [ "SetLinksConverter", "class_tournament_system_1_1_set_links_converter.html", "class_tournament_system_1_1_set_links_converter" ],
