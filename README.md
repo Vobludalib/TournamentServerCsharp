@@ -32,11 +32,11 @@ Given this is an ASP.NET server, this can be hosted in a plethora of ways. Again
 
 ## Endpoint documentation
 
-Too see all available server endpoints, open up ./TournamentServer/Documentation/Endpoints.md
+Too see all available server endpoints, open up [Endpoint documentation](/TournamentServer/Documentation/Endpoints.md)
 
 ## C# Developer documentation
-To read the developer documentation, open up ./TournamentServer/Documentation/html/index.html
+To read the developer documentation, open up [Dev documentation](/TournamentServer/Documentation/html/index.html)
 
-For an explanation of the project from a technical side, see ./TournamentServer/Documentation/Explanation.md
+The above automatically generated documentation from XML comments in the source code - additional comments can be found in the source code where relevant.
 
-This is automatically generated documentation from XML comments in the source code - additional comments can be found in the source code where relevant.
+For an explanation of the project from a technical side, see [Explanation and guide](/TournamentServer/Documentation/Explanation.md)
