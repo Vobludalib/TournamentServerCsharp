@@ -5,20 +5,244 @@
     </assembly>
     <members>
         <member name="T:TournamentSystem.MyFormatConverter">
-                TODO:
-                   Create an OBF JSON from my format (in progress or finished)
-                   -- Create my format JSON for saving tournament
-                   Serialize select information into my own JSON format for server-sending for API
-                   Allow more JSON options to affect the output
-                    Convert from OBF to my format (more used for reconstructing brackets rather than changing them)
-                    Read my format JSON and load it
+            <summary>
+            Converter that is used for serializing a tournament into my specific JSON format
+            </summary>
+            <remarks>
+            To use it, pass it into the converters of JsonSerializerOptions when using JsonSerializer.Deserialize/Serialize()
+            </remarks>
+        </member>
+        <member name="T:TournamentSystem.MyFormatConverter.SetLinksReport">
+            <summary>
+            Class used as intermediate step when reconstructing a set from JSON
+            </summary>
+            <remarks>
+            This is necessary, as my JSON format uses IDs to replace nested references - reads IDs and all info into the SetLinksReport which can then be used later to create the sets.
+            </remarks>
+        </member>
+        <member name="T:TournamentSystem.MyFormatConverter.GameLinksReport">
+            <summary>
+            Class used as intermediate step when reconstructing a game from JSON
+            </summary>
+            <remarks>
+            This is necessary, as my JSON format uses IDs to replace nested references - reads IDs and all info into the GameLinksReport which can then be used later to create the game.
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.MyFormatConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            JSONConverter method that is then called when you use JsonSerializer.Deserialize{Tournament}(jsonBody).
+            </summary>
+            <remarks>Injects all necessary custom converters - tries to preserve as much of the outside JsonSerializerOptions as possible</remarks>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+            <returns>Tournament? - Tournament on success, null on failure</returns>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+            <exception cref="T:System.NullReferenceException"></exception>
+        </member>
+        <member name="M:TournamentSystem.MyFormatConverter.Write(System.Text.Json.Utf8JsonWriter,TournamentSystem.Tournament,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            JsonConverter method that is called when you use JsonSerializer.Serialize{Tournament}(Tournament tournament).
+            </summary>
+            <param name="writer"></param>
+            <param name="value"></param>
+            <param name="options"></param>
+        </member>
+        <member name="T:TournamentSystem.SetLinksConverter">
+            <summary>
+            JSONConverter for reading JSON into SetLinksReport
+            </summary>
+            <remarks>
+            There is no write method, as you should never be serializing SetLinksReports - convert to a proper Set first, then serialize.
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.SetLinksConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            JsonConverter method used when deserializing JSON into SetLinksReport
+            </summary>
+            <remarks>
+            Uses property number counting - if adding or removing a property in the future, don't forget to update the figure or figure out a more elegant solution.
+            At this current stage, this means that to deserialize JSON into a SetLinksReport, all properties must be appear.
+            </remarks>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+            <returns>SetLinksReport? - SetLinkReport on success, null on failure</returns>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="M:TournamentSystem.SetLinksConverter.Write(System.Text.Json.Utf8JsonWriter,TournamentSystem.MyFormatConverter.SetLinksReport,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Not implemented - you should be serializing Set objects, not SetLinksReport objects.
+            </summary>
+            <param name="writer"></param>
+            <param name="value"></param>
+            <param name="options"></param>
+            <exception cref="T:System.NotImplementedException"></exception>
+        </member>
+        <member name="T:TournamentSystem.SetConverter">
+            <summary>
+            JSONConverter for writing Sets to JSON
+            </summary>
+            <remarks>
+            There is no read method, as you should never be deserializing into a Set directly - use SetLinksReport for that, as my format uses Id references instead of nesting.
+            </remarks>
+        </member>
+        <member name="M:TournamentSystem.SetConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Not implemented - you should be deserializing into SetLinksReport.
+            </summary>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+            <returns></returns>
+        </member>
+        <member name="M:TournamentSystem.SetConverter.Write(System.Text.Json.Utf8JsonWriter,TournamentSystem.Set,System.Text.Json.JsonSerializerOptions)">
+             <summary>
+             JsonConverter method used when serializing sets into JSON.
+             </summary>
+             <remarks>
+             Uses Ids to replace nested references for entrants and other sets.
             
-                    Have to create from OBF in multiple steps
-                        Read entrants
-                        Read Sets
-                        Read Games
-                        Update Sets with link
-            *
+             Currently, uses serialization of IWinnerDeciders by casting them into IWinnerDecider, and calling SetWinnerDeciderConverter methods.
+             In the future, can either be replaced by a reflection search for an appropriate method to use instead given a custom class that implements IWinnerDecider, or expanding SetWinnerDeciderConverter code in this assembly.
+             </remarks>
+             <param name="writer"></param>
+             <param name="value"></param>
+             <param name="options"></param>
+        </member>
+        <member name="T:TournamentSystem.SetWinnerDeciderConverter">
+            <summary>
+            JsonConverter for serializing/deserializing IWinnerDecider objects
+            </summary>
+        </member>
+        <member name="M:TournamentSystem.SetWinnerDeciderConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Method for reading JSON into IWinnerDecider
+            </summary>
+            <remarks>
+            Given that we need the type property before we decide what properties to expect, we read the entire object first, only then parsing it appropriately. This differs from how other Read methods work.
+            When reading "type" property, will do a reflection search in the executing assembly to try to find the correct type to instantiate. Can be changed if we want to implement custom IWinnerDeciders outside of this assembly.
+            </remarks>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+            <returns>IWinnerDecider? - IWinnerDecider on success, false on failure</returns>
+            <exception cref="T:System.NullReferenceException"></exception>
+            <exception cref="T:System.NotImplementedException"></exception>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="M:TournamentSystem.SetWinnerDeciderConverter.Write(System.Text.Json.Utf8JsonWriter,TournamentSystem.Set.IWinnerDecider,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Method for serializing IWinnerDeciders into JSON
+            </summary>
+            <remarks>
+            Currently only supports BestOfDecider, with other IWinnerDeciders throwing an exception. This can be changed so that instead it simply serializes all the properties using reflection. I opted not to do this for now, given we have
+            all the control over IWinnerDeciders 'inhouse', but if custom IWinnerDeciders pop up outside what we know, we can rethink this (along with letting custom IWinnerDeciders have their own converters).
+            </remarks>
+            <param name="writer"></param>
+            <param name="value"></param>
+            <param name="options"></param>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="T:TournamentSystem.GameLinksConverter">
+            <summary>
+            JsonConverter for deserializing JSON into GameLinksReport
+            </summary>
+        </member>
+        <member name="M:TournamentSystem.GameLinksConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Method for deserializing JSON into GameLinksReport
+            </summary>
+            <remarks>
+            Use this when reading serialized games, this handles Id-based referencing that is used in my JSON format.
+            </remarks>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+            <returns>GameLinksReport? - GameLinksReport on success, null on failure</returns>
+        </member>
+        <member name="M:TournamentSystem.GameLinksConverter.Write(System.Text.Json.Utf8JsonWriter,TournamentSystem.MyFormatConverter.GameLinksReport,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Not implemented - you should be serializing Game objects, not GameLinksReport objects.
+            </summary>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+        </member>
+        <member name="T:TournamentSystem.GameConverter">
+            <summary>
+            JsonConverter for serializing Game objects to JSON
+            </summary>
+        </member>
+        <member name="M:TournamentSystem.GameConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            Not implemented - you should be deserializing into GameLinksReport
+            </summary>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+            <exception cref="T:System.NotImplementedException"></exception>
+        </member>
+        <member name="M:TournamentSystem.GameConverter.Write(System.Text.Json.Utf8JsonWriter,TournamentSystem.Set.Game,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            JsonConverter method for serializing Game into JSON
+            </summary>
+            <remarks>
+            Replaces nested references with Ids as per my JSON format.
+            </remarks>
+            <param name="writer"></param>
+            <param name="value"></param>
+            <param name="options"></param>
+        </member>
+        <member name="T:TournamentSystem.EntrantConverter">
+            <summary>
+            JsonConverter for Entrant objects
+            </summary>
+        </member>
+        <member name="M:TournamentSystem.EntrantConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            JsonConverter method for deserializing JSON into Entrant
+            </summary>
+            <remarks>
+            Has to read the entire object first so it can retrieve the "type" property, then select the appropriate properties it needs to find based on
+            whether it is an IndividualEntrant or TeamEntrant.
+            </remarks>
+            <param name="reader"></param>
+            <param name="typeToConvert"></param>
+            <param name="options"></param>
+            <returns>Entrant? - Entrant on success, null on failure</returns>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="M:TournamentSystem.EntrantConverter.ReadIndividualEntrant(System.Text.Json.JsonElement)">
+            <summary>
+            Method used for parsing a given JsonElement (here being used to pass the representation of a Json object) into IndividualEntrant
+            </summary>
+            <remarks>
+            The checks for whether or not the JsonElement truly represents an IndividualEntrant are done elsewhere.
+            </remarks>
+            <param name="jE"></param>
+            <returns></returns>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="M:TournamentSystem.EntrantConverter.Write(System.Text.Json.Utf8JsonWriter,TournamentSystem.Entrant,System.Text.Json.JsonSerializerOptions)">
+            <summary>
+            JsonConverter method for serializing an Entrant object into JSON
+            </summary>
+            <remarks>
+            Different handling done here for IndividualEntrant vs TeamEntrant
+            </remarks>
+            <param name="writer"></param>
+            <param name="value"></param>
+            <param name="options"></param>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
+        </member>
+        <member name="M:TournamentSystem.JsonParseHelper.ParseJsonElementIntoDict(System.Text.Json.JsonElement)">
+            <summary>
+            Helper method I used for working with JsonElements that parse it into a dictionary of properties and string values.
+            </summary>
+            <param name="jE"></param>
+            <returns></returns>
+            <exception cref="T:System.Text.Json.JsonException"></exception>
         </member>
         <member name="T:TournamentSystem.Tournament">
             <summary>

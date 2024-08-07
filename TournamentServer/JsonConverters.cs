@@ -8,24 +8,20 @@ using Nito.AsyncEx;
 
 namespace TournamentSystem;
 
-/**
-    TODO:
-       Create an OBF JSON from my format (in progress or finished)
-       -- Create my format JSON for saving tournament
-       Serialize select information into my own JSON format for server-sending for API
-       Allow more JSON options to affect the output
-        Convert from OBF to my format (more used for reconstructing brackets rather than changing them)
-        Read my format JSON and load it
-
-        Have to create from OBF in multiple steps
-            Read entrants
-            Read Sets
-            Read Games
-            Update Sets with link
-**/
-
+/// <summary>
+/// Converter that is used for serializing a tournament into my specific JSON format
+/// </summary>
+/// <remarks>
+/// To use it, pass it into the converters of JsonSerializerOptions when using JsonSerializer.Deserialize/Serialize()
+/// </remarks>
 public class MyFormatConverter : JsonConverter<Tournament>
 {
+    /// <summary>
+    /// Class used as intermediate step when reconstructing a set from JSON
+    /// </summary>
+    /// <remarks>
+    /// This is necessary, as my JSON format uses IDs to replace nested references - reads IDs and all info into the SetLinksReport which can then be used later to create the sets.
+    /// </remarks>
     public record class SetLinksReport
     {
         public int SetId { get; set; }
@@ -42,6 +38,12 @@ public class MyFormatConverter : JsonConverter<Tournament>
         public Dictionary<string, string>? Data { get; set; }
     }
 
+    /// <summary>
+    /// Class used as intermediate step when reconstructing a game from JSON
+    /// </summary>
+    /// <remarks>
+    /// This is necessary, as my JSON format uses IDs to replace nested references - reads IDs and all info into the GameLinksReport which can then be used later to create the game.
+    /// </remarks>
     public record class GameLinksReport
     {
         public int GameNumber { get; set; }
@@ -66,13 +68,24 @@ public class MyFormatConverter : JsonConverter<Tournament>
         return reader.GetInt32();
     }
 
+    /// <summary>
+    /// JSONConverter method that is then called when you use JsonSerializer.Deserialize{Tournament}(jsonBody).
+    /// </summary>
+    /// <remarks>Injects all necessary custom converters - tries to preserve as much of the outside JsonSerializerOptions as possible</remarks>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
+    /// <returns>Tournament? - Tournament on success, null on failure</returns>
+    /// <exception cref="JsonException"></exception>
+    /// <exception cref="NullReferenceException"></exception>
     public override Tournament? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
         JsonSerializerOptions options
     )
     {
-        var jsonSettings = new JsonSerializerOptions
+        // Preserve all settings, but adding custom converters
+        options = new JsonSerializerOptions(options)
         {
             Converters =
             {
@@ -83,11 +96,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                 new JsonStringEnumConverter<Set.Game.GameStatus>(),
                 new SetWinnerDeciderConverter(),
                 new EntrantConverter()
-            },
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true,
-            NumberHandling = JsonNumberHandling.AllowReadingFromString,
-            PropertyNameCaseInsensitive = true
+            }
         };
 
         List<SetLinksReport> setsToLink = new List<SetLinksReport>();
@@ -109,7 +118,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
                             SetLinksReport report =
-                                sc.Read(ref reader, typeof(Set), jsonSettings)
+                                sc.Read(ref reader, typeof(Set), options)
                                 ?? throw new JsonException();
                             setsToLink.Add(report);
                             while (
@@ -130,7 +139,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                             var entrant = JsonSerializer.Deserialize(
                                 ref reader,
                                 typeof(Entrant),
-                                jsonSettings
+                                options
                             );
                             if (entrant is null)
                                 throw new JsonException();
@@ -150,7 +159,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                             JsonSerializer.Deserialize(
                                 ref reader,
                                 typeof(Dictionary<string, string>),
-                                jsonSettings
+                                options
                             );
                         if (readData is null)
                         {
@@ -163,7 +172,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
                         var readStatus = JsonSerializer.Deserialize(
                             ref reader,
                             typeof(Tournament.TournamentStatus),
-                            jsonSettings
+                            options
                         );
                         if (readStatus is null)
                         {
@@ -234,14 +243,19 @@ public class MyFormatConverter : JsonConverter<Tournament>
         return tour;
     }
 
+    /// <summary>
+    /// JsonConverter method that is called when you use JsonSerializer.Serialize{Tournament}(Tournament tournament).
+    /// </summary>
+    /// <param name="writer"></param>
+    /// <param name="value"></param>
+    /// <param name="options"></param>
     public override void Write(
         Utf8JsonWriter writer,
         Tournament value,
         JsonSerializerOptions options
     )
     {
-        // TODO: Enable some leakage through of the input settings
-        var jsonSettings = new JsonSerializerOptions
+        options = new JsonSerializerOptions(options)
         {
             Converters =
             {
@@ -262,7 +276,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
         // Prevent serializing into dict-like, but just two lists of objects
         var sets = value.Sets.Values;
         writer.WritePropertyName("sets");
-        JsonSerializer.Serialize(writer, sets, jsonSettings);
+        JsonSerializer.Serialize(writer, sets, options);
 
         var entrants = value.Entrants.Values;
         Dictionary<int, Entrant> topLevelEntrants = new();
@@ -287,19 +301,37 @@ public class MyFormatConverter : JsonConverter<Tournament>
         // Now, this gives all entrants still left in the dict are top-level entrants.
         entrants = topLevelEntrants.Values;
         writer.WritePropertyName("entrants");
-        JsonSerializer.Serialize(writer, entrants, jsonSettings);
+        JsonSerializer.Serialize(writer, entrants, options);
 
         writer.WritePropertyName("data");
-        JsonSerializer.Serialize(writer, value.Data, jsonSettings);
+        JsonSerializer.Serialize(writer, value.Data, options);
 
         writer.WritePropertyName("status");
-        JsonSerializer.Serialize(writer, value.Status, jsonSettings);
+        JsonSerializer.Serialize(writer, value.Status, options);
         writer.WriteEndObject();
     }
 }
 
+/// <summary>
+/// JSONConverter for reading JSON into SetLinksReport
+/// </summary>
+/// <remarks>
+/// There is no write method, as you should never be serializing SetLinksReports - convert to a proper Set first, then serialize.
+/// </remarks>
 public class SetLinksConverter : JsonConverter<MyFormatConverter.SetLinksReport>
 {
+    /// <summary>
+    /// JsonConverter method used when deserializing JSON into SetLinksReport
+    /// </summary>
+    /// <remarks>
+    /// Uses property number counting - if adding or removing a property in the future, don't forget to update the figure or figure out a more elegant solution.
+    /// At this current stage, this means that to deserialize JSON into a SetLinksReport, all properties must be appear.
+    /// </remarks>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
+    /// <returns>SetLinksReport? - SetLinkReport on success, null on failure</returns>
+    /// <exception cref="JsonException"></exception>
     public override MyFormatConverter.SetLinksReport? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -387,6 +419,13 @@ public class SetLinksConverter : JsonConverter<MyFormatConverter.SetLinksReport>
         return report;
     }
 
+    /// <summary>
+    /// Not implemented - you should be serializing Set objects, not SetLinksReport objects.
+    /// </summary>
+    /// <param name="writer"></param>
+    /// <param name="value"></param>
+    /// <param name="options"></param>
+    /// <exception cref="NotImplementedException"></exception>
     public override void Write(
         Utf8JsonWriter writer,
         MyFormatConverter.SetLinksReport value,
@@ -397,8 +436,21 @@ public class SetLinksConverter : JsonConverter<MyFormatConverter.SetLinksReport>
     }
 }
 
+/// <summary>
+/// JSONConverter for writing Sets to JSON
+/// </summary>
+/// <remarks>
+/// There is no read method, as you should never be deserializing into a Set directly - use SetLinksReport for that, as my format uses Id references instead of nesting.
+/// </remarks>
 public class SetConverter : JsonConverter<Set>
 {
+    /// <summary>
+    /// Not implemented - you should be deserializing into SetLinksReport.
+    /// </summary>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
+    /// <returns></returns>
     public override Set? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -408,6 +460,18 @@ public class SetConverter : JsonConverter<Set>
         return (Set?)JsonSerializer.Deserialize(ref reader, typeof(Set), options);
     }
 
+    /// <summary>
+    /// JsonConverter method used when serializing sets into JSON.
+    /// </summary>
+    /// <remarks>
+    /// Uses Ids to replace nested references for entrants and other sets.
+    ///
+    /// Currently, uses serialization of IWinnerDeciders by casting them into IWinnerDecider, and calling SetWinnerDeciderConverter methods.
+    /// In the future, can either be replaced by a reflection search for an appropriate method to use instead given a custom class that implements IWinnerDecider, or expanding SetWinnerDeciderConverter code in this assembly.
+    /// </remarks>
+    /// <param name="writer"></param>
+    /// <param name="value"></param>
+    /// <param name="options"></param>
     public override void Write(Utf8JsonWriter writer, Set value, JsonSerializerOptions options)
     {
         var newOptions = new JsonSerializerOptions(options);
@@ -493,8 +557,25 @@ public class SetConverter : JsonConverter<Set>
     }
 }
 
+/// <summary>
+/// JsonConverter for serializing/deserializing IWinnerDecider objects
+/// </summary>
 public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
 {
+    /// <summary>
+    /// Method for reading JSON into IWinnerDecider
+    /// </summary>
+    /// <remarks>
+    /// Given that we need the type property before we decide what properties to expect, we read the entire object first, only then parsing it appropriately. This differs from how other Read methods work.
+    /// When reading "type" property, will do a reflection search in the executing assembly to try to find the correct type to instantiate. Can be changed if we want to implement custom IWinnerDeciders outside of this assembly.
+    /// </remarks>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
+    /// <returns>IWinnerDecider? - IWinnerDecider on success, false on failure</returns>
+    /// <exception cref="NullReferenceException"></exception>
+    /// <exception cref="NotImplementedException"></exception>
+    /// <exception cref="JsonException"></exception>
     public override Set.IWinnerDecider? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -549,6 +630,17 @@ public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
         throw new JsonException();
     }
 
+    /// <summary>
+    /// Method for serializing IWinnerDeciders into JSON
+    /// </summary>
+    /// <remarks>
+    /// Currently only supports BestOfDecider, with other IWinnerDeciders throwing an exception. This can be changed so that instead it simply serializes all the properties using reflection. I opted not to do this for now, given we have
+    /// all the control over IWinnerDeciders 'inhouse', but if custom IWinnerDeciders pop up outside what we know, we can rethink this (along with letting custom IWinnerDeciders have their own converters).
+    /// </remarks>
+    /// <param name="writer"></param>
+    /// <param name="value"></param>
+    /// <param name="options"></param>
+    /// <exception cref="JsonException"></exception>
     public override void Write(
         Utf8JsonWriter writer,
         Set.IWinnerDecider value,
@@ -569,8 +661,21 @@ public class SetWinnerDeciderConverter : JsonConverter<Set.IWinnerDecider>
     }
 }
 
+/// <summary>
+/// JsonConverter for deserializing JSON into GameLinksReport
+/// </summary>
 public class GameLinksConverter : JsonConverter<MyFormatConverter.GameLinksReport>
 {
+    /// <summary>
+    /// Method for deserializing JSON into GameLinksReport
+    /// </summary>
+    /// <remarks>
+    /// Use this when reading serialized games, this handles Id-based referencing that is used in my JSON format.
+    /// </remarks>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
+    /// <returns>GameLinksReport? - GameLinksReport on success, null on failure</returns>
     public override MyFormatConverter.GameLinksReport? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -632,6 +737,12 @@ public class GameLinksConverter : JsonConverter<MyFormatConverter.GameLinksRepor
         return report;
     }
 
+    /// <summary>
+    /// Not implemented - you should be serializing Game objects, not GameLinksReport objects.
+    /// </summary>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
     public override void Write(
         Utf8JsonWriter writer,
         MyFormatConverter.GameLinksReport value,
@@ -642,8 +753,18 @@ public class GameLinksConverter : JsonConverter<MyFormatConverter.GameLinksRepor
     }
 }
 
+/// <summary>
+/// JsonConverter for serializing Game objects to JSON
+/// </summary>
 public class GameConverter : JsonConverter<Set.Game>
 {
+    /// <summary>
+    /// Not implemented - you should be deserializing into GameLinksReport
+    /// </summary>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
+    /// <exception cref="NotImplementedException"></exception>
     public override Set.Game? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -653,6 +774,15 @@ public class GameConverter : JsonConverter<Set.Game>
         throw new NotImplementedException();
     }
 
+    /// <summary>
+    /// JsonConverter method for serializing Game into JSON
+    /// </summary>
+    /// <remarks>
+    /// Replaces nested references with Ids as per my JSON format.
+    /// </remarks>
+    /// <param name="writer"></param>
+    /// <param name="value"></param>
+    /// <param name="options"></param>
     public override void Write(Utf8JsonWriter writer, Set.Game value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
@@ -689,8 +819,23 @@ public class GameConverter : JsonConverter<Set.Game>
     }
 }
 
+/// <summary>
+/// JsonConverter for Entrant objects
+/// </summary>
 public class EntrantConverter : JsonConverter<Entrant>
 {
+    /// <summary>
+    /// JsonConverter method for deserializing JSON into Entrant
+    /// </summary>
+    /// <remarks>
+    /// Has to read the entire object first so it can retrieve the "type" property, then select the appropriate properties it needs to find based on
+    /// whether it is an IndividualEntrant or TeamEntrant.
+    /// </remarks>
+    /// <param name="reader"></param>
+    /// <param name="typeToConvert"></param>
+    /// <param name="options"></param>
+    /// <returns>Entrant? - Entrant on success, null on failure</returns>
+    /// <exception cref="JsonException"></exception>
     public override Entrant? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -793,6 +938,15 @@ public class EntrantConverter : JsonConverter<Entrant>
         return null;
     }
 
+    /// <summary>
+    /// Method used for parsing a given JsonElement (here being used to pass the representation of a Json object) into IndividualEntrant
+    /// </summary>
+    /// <remarks>
+    /// The checks for whether or not the JsonElement truly represents an IndividualEntrant are done elsewhere.
+    /// </remarks>
+    /// <param name="jE"></param>
+    /// <returns></returns>
+    /// <exception cref="JsonException"></exception>
     private IndividualEntrant ReadIndividualEntrant(JsonElement jE)
     {
         Dictionary<string, JsonElement> properties = new();
@@ -834,6 +988,16 @@ public class EntrantConverter : JsonConverter<Entrant>
         throw new JsonException();
     }
 
+    /// <summary>
+    /// JsonConverter method for serializing an Entrant object into JSON
+    /// </summary>
+    /// <remarks>
+    /// Different handling done here for IndividualEntrant vs TeamEntrant
+    /// </remarks>
+    /// <param name="writer"></param>
+    /// <param name="value"></param>
+    /// <param name="options"></param>
+    /// <exception cref="JsonException"></exception>
     public override void Write(Utf8JsonWriter writer, Entrant value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
@@ -914,6 +1078,12 @@ public class EntrantConverter : JsonConverter<Entrant>
 
 internal static class JsonParseHelper
 {
+    /// <summary>
+    /// Helper method I used for working with JsonElements that parse it into a dictionary of properties and string values.
+    /// </summary>
+    /// <param name="jE"></param>
+    /// <returns></returns>
+    /// <exception cref="JsonException"></exception>
     internal static Dictionary<string, string> ParseJsonElementIntoDict(JsonElement jE)
     {
         var dict = new Dictionary<string, string>();
