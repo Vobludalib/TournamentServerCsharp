@@ -3,7 +3,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using TournamentSystem;
+
+namespace TournamentSystem;
 
 /// <summary>
 /// Class that handles processing requests and locking across class boundaries
@@ -13,13 +14,16 @@ using TournamentSystem;
 /// </remarks>
 public class ServerHandler
 {
-    public MyFormatConverter myFormatConverter;
-    public SetConverter setConverter;
-    public EntrantConverter entrantConverter;
-    public GameConverter gameConverter;
-    public GameLinksConverter gameLinksConverter;
-    public Tournament? tournament;
+    internal MyFormatConverter myFormatConverter;
+    internal SetConverter setConverter;
+    internal EntrantConverter entrantConverter;
+    internal GameConverter gameConverter;
+    internal GameLinksConverter gameLinksConverter;
+    internal Tournament? tournament;
 
+    /// <summary>
+    /// Constructor for ServerHandler
+    /// </summary>
     public ServerHandler()
     {
         myFormatConverter = new();
@@ -46,7 +50,7 @@ public class ServerHandler
             var allSets = tournament.Sets.Values.ToList();
             // Sorting by setId to guarantee consistent locking order
             allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
-            List<IDisposable> setLocks = new();
+            List<IDisposable> setLocks = [];
             foreach (Set set in allSets)
             {
                 setLocks.Add(await set.LockHandler.LockSetReadAsync());
@@ -195,7 +199,7 @@ public class ServerHandler
     /// <exception cref="JsonException"></exception>
     public async Task<IResult> HandleTournamentPostAsync(HttpContext context)
     {
-        using (StreamReader reader = new StreamReader(context.Request.Body, Encoding.UTF8))
+        using (StreamReader reader = new(context.Request.Body, Encoding.UTF8))
         {
             string jsonBody = await reader.ReadToEndAsync();
             if (jsonBody is null)
@@ -270,7 +274,7 @@ public class ServerHandler
             {
                 return Results.BadRequest("Set has to be InProgress.");
             }
-            using (StreamReader reader = new StreamReader(context.Request.Body, Encoding.UTF8))
+            using (StreamReader reader = new(context.Request.Body, Encoding.UTF8))
             {
                 string jsonBody = await reader.ReadToEndAsync();
                 if (jsonBody is null)
@@ -300,15 +304,16 @@ public class ServerHandler
                     else if (entrant2.EntrantId == glr.GameWinnerId)
                         winner = entrant2;
 
-                    Set.Game game = new Set.Game(
-                        setToTieTo,
-                        glr.GameNumber,
-                        entrant1,
-                        entrant2,
-                        winner,
-                        (Set.Game.GameStatus)glr.Status!,
-                        glr.Data
-                    );
+                    Set.Game game =
+                        new(
+                            setToTieTo,
+                            glr.GameNumber,
+                            entrant1,
+                            entrant2,
+                            winner,
+                            (Set.Game.GameStatus)glr.Status!,
+                            glr.Data
+                        );
 
                     var amountOfMatchingSets = setToTieTo
                         .Games

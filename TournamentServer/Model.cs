@@ -13,9 +13,9 @@ namespace TournamentSystem;
 /// </remarks>
 public class Tournament
 {
-    private Dictionary<int, Set> _sets { get; set; }
-    private Dictionary<int, Entrant> _entrants { get; set; }
-    private Dictionary<string, string> _data { get; set; }
+    private Dictionary<int, Set> _sets;
+    private Dictionary<int, Entrant> _entrants;
+    private Dictionary<string, string> _data;
     private TournamentStatus _status;
     private TournamentLockHandler _lockHandler;
 
@@ -115,9 +115,9 @@ public class Tournament
     /// </remarks>
     public Tournament()
     {
-        _sets = new Dictionary<int, Set>();
-        _entrants = new Dictionary<int, Entrant>();
-        _data = new Dictionary<string, string>();
+        _sets = [];
+        _entrants = [];
+        _data = [];
         _status = TournamentStatus.Setup;
         _lockHandler = new();
     }
@@ -189,7 +189,7 @@ public class Tournament
         var allSets = _sets.Values.ToList();
         // Sorting by setId to guarantee consistent locking order
         allSets.Sort((x1, x2) => x1.SetId.CompareTo(x2.SetId));
-        List<IDisposable> setLocks = new();
+        List<IDisposable> setLocks = [];
         foreach (Set set in allSets)
         {
             setLocks.Add(await set.LockHandler.LockSetReadAsync());
@@ -228,7 +228,7 @@ public class Tournament
     /// <returns>Bool - Returns true on success, otherwise false</returns>
     private bool VerifyAmountOfEntrants()
     {
-        Dictionary<Set, int> amountOfEntrants = new();
+        Dictionary<Set, int> amountOfEntrants = [];
         foreach (Set set in _sets.Values)
         {
             if (set.Entrant1 is not null)
@@ -257,10 +257,10 @@ public class Tournament
     /// <returns>Bool - Returns true on success, otherwise false</returns>
     private bool VerifyNoCycles()
     {
-        Dictionary<int, List<int>> adjacents = new();
+        Dictionary<int, List<int>> adjacents = [];
         foreach (Set set in _sets.Values)
         {
-            adjacents[set.SetId] = new();
+            adjacents[set.SetId] = [];
         }
         foreach (Set set in _sets.Values)
         {
@@ -276,8 +276,8 @@ public class Tournament
 
         // Use DFS to check for cycles
         Stack<int> stack = new();
-        HashSet<int> currPath = new();
-        HashSet<int> visited = new();
+        HashSet<int> currPath = [];
+        HashSet<int> visited = [];
         foreach (var node in adjacents.Keys)
         {
             if (!visited.Contains(node))
@@ -288,9 +288,8 @@ public class Tournament
                 {
                     int current = stack.Peek();
 
-                    if (!visited.Contains(current))
+                    if (visited.Add(current))
                     {
-                        visited.Add(current);
                         currPath.Add(current);
                     }
 
@@ -336,7 +335,7 @@ public class Tournament
 
             using (var setLock = await _lockHandler.LockSetsWriteAsync())
             {
-                if (_sets.Keys.Contains(set.SetId))
+                if (_sets.ContainsKey(set.SetId))
                     return false;
                 _sets.Add(set.SetId, set);
                 return true;
@@ -358,9 +357,8 @@ public class Tournament
 
             using (var setLock = await _lockHandler.LockSetsWriteAsync())
             {
-                if (_sets.ContainsKey(id))
+                if (_sets.Remove(id))
                 {
-                    _sets.Remove(id);
                     return true;
                 }
                 return false;
@@ -400,7 +398,7 @@ public class Tournament
             {
                 try
                 {
-                    if (_entrants.Keys.Contains(entrant.EntrantId))
+                    if (_entrants.ContainsKey(entrant.EntrantId))
                         return false;
                     _entrants.Add(entrant.EntrantId, entrant);
                     return true;
@@ -429,9 +427,8 @@ public class Tournament
             {
                 try
                 {
-                    if (_entrants.ContainsKey(id))
+                    if (_entrants.Remove(id))
                     {
-                        _entrants.Remove(id);
                         return true;
                     }
                     return false;
@@ -477,12 +474,8 @@ public class Tournament
             {
                 try
                 {
-                    if (_data.ContainsKey(label))
+                    if (!_data.TryAdd(label, value))
                         _data[label] = value;
-                    else
-                    {
-                        _data.Add(label, value);
-                    }
                     return true;
                 }
                 catch
@@ -509,9 +502,8 @@ public class Tournament
             {
                 try
                 {
-                    if (_data.ContainsKey(key))
+                    if (_data.Remove(key))
                     {
-                        _data.Remove(key);
                         return true;
                     }
                     else
@@ -554,7 +546,7 @@ public class Tournament
     public async Task<Dictionary<string, string>> GetAllDataAsync()
     {
         // We have to clone the dict and create a snapshot at the time, so we can free up the lock while ensuring the dict does not change after this method returns.
-        Dictionary<string, string> clonedDict = new();
+        Dictionary<string, string> clonedDict = [];
         using (var dataLock = await _lockHandler.LockDataReadAsync())
         {
             // Not doing Parallel.Foreach, as every loop is really simple, and the overhead would be too large.
@@ -804,10 +796,10 @@ public class Set
     /// <param name="Id"></param>
     public Set(int Id)
     {
-        _data = new Dictionary<string, string>();
+        _data = [];
         _setId = Id;
         _status = SetStatus.IncompleteSetup;
-        _games = new List<Game>();
+        _games = [];
         _lockHandler = new();
     }
 
@@ -922,7 +914,7 @@ public class Set
         _winner = report.Winner is null ? null : entrants[(int)report.Winner];
         _loser = report.Loser is null ? null : entrants[(int)report.Loser];
         _setDecider = report.WinnerDecider;
-        _data = report.Data ?? new Dictionary<string, string>();
+        _data = report.Data ?? [];
         // Create all relevant games
         foreach (MyFormatConverter.GameLinksReport gr in report.Games!)
         {
@@ -933,7 +925,7 @@ public class Set
                 reducedSearch.Add(_entrant2);
             Entrant e1 = reducedSearch.First(x => x.EntrantId == gr.Entrant1Id);
             Entrant e2 = reducedSearch.First(x => x.EntrantId == gr.Entrant2Id);
-            Game game = new Game(this, gr.GameNumber, e1, e2, gr.Data);
+            Game game = new(this, gr.GameNumber, e1, e2, gr.Data);
             Entrant? winner = reducedSearch.FirstOrDefault(x => x.EntrantId == gr.GameWinnerId);
             if (winner is not null)
                 AsyncContext.Run(() => game.SetWinnerAsync(winner));
@@ -975,7 +967,7 @@ public class Set
         // Lock the game objects in gameNumber order
         Entrant? winner;
         IEnumerable<Game> gamesInOrder = Games.OrderBy(x => x.GameNumber);
-        List<IDisposable> locks = new();
+        List<IDisposable> locks = [];
         foreach (Game game in gamesInOrder)
         {
             locks.Add(await game.Lock.ReaderLockAsync());
@@ -1115,7 +1107,7 @@ public class Set
         // Dictionary for the other data, stored as a string, and will be parsed when and if necessary
         // Given that the kind of data stored here can have a variety of formats, no point trying to parse here
         // The parsing can happen when and if needed when working with the game data.
-        private Dictionary<string, string> _data = new();
+        private Dictionary<string, string> _data = [];
         public Dictionary<string, string> Data => _data;
 
         /// <summary>
@@ -1139,7 +1131,7 @@ public class Set
             _entrant1 = Entrant1;
             _entrant2 = Entrant2;
             if (Data is null)
-                _data = new Dictionary<string, string>();
+                _data = [];
             _data = Data!;
             _status = GameStatus.Waiting;
             _lock = new();
@@ -1174,7 +1166,7 @@ public class Set
             _entrant2 = Entrant2;
             _gameWinner = Winner;
             if (Data is null)
-                _data = new Dictionary<string, string>();
+                _data = [];
             _data = Data!;
             _status = Status;
             _lock = new();
@@ -1256,7 +1248,7 @@ public abstract record class Entrant
     /// can or can't be included, instead we just store directly from the JSON and any parsing is done
     /// when required
     /// </remarks>
-    protected Dictionary<string, string> _entrantData = new Dictionary<string, string>();
+    protected Dictionary<string, string> _entrantData = [];
     public Dictionary<string, string> EntrantData => _entrantData;
 }
 
@@ -1336,10 +1328,7 @@ public record class IndividualEntrant : Entrant
         EntrantId = Id;
         EntrantName = new Tag(Tag);
 
-        if (data is null)
-        {
-            data = new Dictionary<string, string>();
-        }
+        data ??= [];
         _entrantData = data;
     }
 
@@ -1347,7 +1336,8 @@ public record class IndividualEntrant : Entrant
     /// Constructor for IndividualEntrant if we want them to have a FullName for a name.
     /// </summary>
     /// <param name="Id"></param>
-    /// <param name="Tag"></param>
+    /// <param name="FirstName"></param>
+    /// <param name="LastName"></param>
     /// <param name="data"></param>
     public IndividualEntrant(
         int Id,
@@ -1359,10 +1349,7 @@ public record class IndividualEntrant : Entrant
         EntrantId = Id;
         EntrantName = new FullName(FirstName, LastName);
 
-        if (data is null)
-        {
-            data = new Dictionary<string, string>();
-        }
+        data ??= [];
         _entrantData = data;
     }
 }
@@ -1395,7 +1382,6 @@ public record class TeamEntrant : Entrant
     /// Constructor for TeamEntrant where we don't specify the TeamName.
     /// </summary>
     /// <param name="Id"></param>
-    /// <param name="Name"></param>
     /// <param name="individualEntrants"></param>
     public TeamEntrant(int Id, List<IndividualEntrant> individualEntrants)
     {

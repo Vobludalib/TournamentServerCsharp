@@ -1,8 +1,6 @@
 //Countable
 
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using TournamentSystem;
 
 class TournamentServer()
@@ -68,7 +66,7 @@ class TournamentServer()
 
         if (args.Length > 1)
         {
-            throw new ArgumentException();
+            throw new ArgumentException("Too many command line arguments!");
         }
 
         bool loadFromArgs = false;

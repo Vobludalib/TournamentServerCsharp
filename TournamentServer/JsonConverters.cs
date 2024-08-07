@@ -55,7 +55,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
 
         public GameLinksReport()
         {
-            Data = new Dictionary<string, string>();
+            Data = [];
         }
     }
 
@@ -99,9 +99,9 @@ public class MyFormatConverter : JsonConverter<Tournament>
             }
         };
 
-        List<SetLinksReport> setsToLink = new List<SetLinksReport>();
-        List<Entrant> entrants = new();
-        Dictionary<string, string> data = new();
+        List<SetLinksReport> setsToLink = [];
+        List<Entrant> entrants = [];
+        Dictionary<string, string> data = [];
         Tournament.TournamentStatus status = Tournament.TournamentStatus.Setup;
         while (reader.Read())
         {
@@ -136,13 +136,9 @@ public class MyFormatConverter : JsonConverter<Tournament>
                         reader.Read(); // Read the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
-                            var entrant = JsonSerializer.Deserialize(
-                                ref reader,
-                                typeof(Entrant),
-                                options
-                            );
-                            if (entrant is null)
-                                throw new JsonException();
+                            var entrant =
+                                JsonSerializer.Deserialize(ref reader, typeof(Entrant), options)
+                                ?? throw new JsonException();
                             entrants.Add((Entrant)entrant);
                             while (
                                 reader.TokenType != JsonTokenType.StartObject
@@ -155,29 +151,23 @@ public class MyFormatConverter : JsonConverter<Tournament>
                     }
                     else if (reader.GetString() == "data")
                     {
-                        var readData = (Dictionary<string, string>?)
-                            JsonSerializer.Deserialize(
-                                ref reader,
-                                typeof(Dictionary<string, string>),
-                                options
-                            );
-                        if (readData is null)
-                        {
-                            throw new JsonException();
-                        }
+                        var readData =
+                            (Dictionary<string, string>?)
+                                JsonSerializer.Deserialize(
+                                    ref reader,
+                                    typeof(Dictionary<string, string>),
+                                    options
+                                ) ?? throw new JsonException();
                         data = readData;
                     }
                     else if (reader.GetString() == "status")
                     {
-                        var readStatus = JsonSerializer.Deserialize(
-                            ref reader,
-                            typeof(Tournament.TournamentStatus),
-                            options
-                        );
-                        if (readStatus is null)
-                        {
-                            throw new JsonException();
-                        }
+                        var readStatus =
+                            JsonSerializer.Deserialize(
+                                ref reader,
+                                typeof(Tournament.TournamentStatus),
+                                options
+                            ) ?? throw new JsonException();
                         status = (Tournament.TournamentStatus)readStatus;
                     }
                     break;
@@ -192,7 +182,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
             AsyncContext.Run(() => tour.AddOrEditDataAsync(key, data[key]));
         }
 
-        Dictionary<int, Entrant> entrantDict = new();
+        Dictionary<int, Entrant> entrantDict = [];
         foreach (var entrant in entrants)
         {
             AsyncContext.Run(() => tour.AddEntrantAsync(entrant));
@@ -212,7 +202,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
 
         // Everything is read, now it's time to go through the set links reconstruction process
         // First, let's generate all the Set objects with the correct Ids, then we just put in all the relevant information,
-        Dictionary<int, Set> sets = new();
+        Dictionary<int, Set> sets = [];
         foreach (var setReport in setsToLink)
         {
             sets.Add(setReport.SetId, new Set(setReport.SetId));
@@ -279,7 +269,7 @@ public class MyFormatConverter : JsonConverter<Tournament>
         JsonSerializer.Serialize(writer, sets, options);
 
         var entrants = value.Entrants.Values;
-        Dictionary<int, Entrant> topLevelEntrants = new();
+        Dictionary<int, Entrant> topLevelEntrants = [];
         // We want to have nesting so as to not have id-based writing in the entrants
         // this means removing any entrants that are part of a team
         // First we put all entrants in a dict by their ID
@@ -290,9 +280,9 @@ public class MyFormatConverter : JsonConverter<Tournament>
         // We go over all the teamEntrants, and remove all their individual entrants from the Dict
         foreach (Entrant entrant in entrants)
         {
-            if (entrant is TeamEntrant)
+            if (entrant is TeamEntrant tE)
             {
-                foreach (Entrant lowerLevelEntrant in ((TeamEntrant)entrant).IndividualEntrants)
+                foreach (Entrant lowerLevelEntrant in tE.IndividualEntrants)
                 {
                     topLevelEntrants.Remove(lowerLevelEntrant.EntrantId);
                 }
@@ -383,7 +373,7 @@ public class SetLinksConverter : JsonConverter<MyFormatConverter.SetLinksReport>
                         break;
                     case "games":
                         var gc = new GameLinksConverter();
-                        report.Games = new List<MyFormatConverter.GameLinksReport>();
+                        report.Games = [];
                         reader.Read(); // Read to get to the StartObject
                         while (reader.TokenType != JsonTokenType.EndArray)
                         {
@@ -875,7 +865,7 @@ public class EntrantConverter : JsonConverter<Entrant>
                     throw new JsonException();
                 }
                 int id = ((JsonElement)idObj).GetInt32();
-                Dictionary<string, string> data = new();
+                Dictionary<string, string> data = [];
                 if (
                     properties.TryGetValue("entrantData", out object? dataObj)
                     && dataObj is not null
@@ -922,7 +912,7 @@ public class EntrantConverter : JsonConverter<Entrant>
                     );
                     if (individualEntrantsObjects is null)
                         throw new JsonException();
-                    List<IndividualEntrant> individualEntrants = new();
+                    List<IndividualEntrant> individualEntrants = [];
                     foreach (var obj in ((JsonElement)individualEntrantsObjects).EnumerateArray())
                     {
                         individualEntrants.Add(ReadIndividualEntrant(obj));
@@ -947,9 +937,9 @@ public class EntrantConverter : JsonConverter<Entrant>
     /// <param name="jE"></param>
     /// <returns></returns>
     /// <exception cref="JsonException"></exception>
-    private IndividualEntrant ReadIndividualEntrant(JsonElement jE)
+    private static IndividualEntrant ReadIndividualEntrant(JsonElement jE)
     {
-        Dictionary<string, JsonElement> properties = new();
+        Dictionary<string, JsonElement> properties = [];
         foreach (var val in jE.EnumerateObject())
         {
             properties.Add(val.Name, val.Value);
@@ -959,7 +949,7 @@ public class EntrantConverter : JsonConverter<Entrant>
             throw new JsonException();
         }
         int id = idObj.GetInt32();
-        Dictionary<string, string> data = new();
+        Dictionary<string, string> data = [];
         if (properties.TryGetValue("entrantData", out JsonElement dataObj))
         {
             data = JsonParseHelper.ParseJsonElementIntoDict(dataObj);
@@ -1046,11 +1036,7 @@ public class EntrantConverter : JsonConverter<Entrant>
             else if (property.Name.Contains("IndividualEntrants"))
             {
                 writer.WritePropertyName(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
-                var propertyValue = property.GetValue(value);
-                if (propertyValue is null)
-                {
-                    throw new JsonException();
-                }
+                var propertyValue = property.GetValue(value) ?? throw new JsonException();
                 var listOfIndividuals = (List<IndividualEntrant>)propertyValue;
                 EntrantConverter ec = new();
                 writer.WriteStartArray();
