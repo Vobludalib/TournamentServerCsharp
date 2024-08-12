@@ -37,8 +37,8 @@
       "type": "IndividualEntrant",
       "entrantId": 3,
       "individualName": {
-        "firstName": "Alena",
-        "lastName": "Libricka"
+        "firstName": "John",
+        "lastName": "McEnroe"
       },
       "entrantData": {}
     },
@@ -54,7 +54,7 @@
             "lastName": "Libricky"
           },
           "entrantData": {
-            "dateOfBirth": "11/10/2004"
+            "dateOfBirth": "1/1/1970"
           }
         },
         {
@@ -72,7 +72,7 @@
   ],
   "data": {
     "time": "11:00:00",
-    "city":  "Prague"
+    "city":  "Atlantis"
   },
   "status": "InProgress"
 }
