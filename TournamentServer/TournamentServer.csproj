@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <DocumentationFile>C:\Users\simon\source\repos\TournamentServerCsharp\TournamentServer\bin\release\net8.0\documentation.xml</DocumentationFile>
+    <DocumentationFile>.\bin\release\net8.0\documentation.xml</DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
