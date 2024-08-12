@@ -415,6 +415,9 @@ public class ServerHandler
         {
             return Results.BadRequest("No tournament exists");
         }
+        using (var statusLock = await tournament.LockHandler.LockStatusReadAsync())
+        { if (tournament.Status != Tournament.TournamentStatus.InProgress) return Results.BadRequest("Tournament must be in progress to add/change games"); }
+
         using (var setsLock = await tournament.LockHandler.LockSetsReadAsync())
         {
             var set = await tournament.TryGetSetAsync(setId);
