@@ -1,0 +1,37 @@
+{
+    "setId": 1,
+    "setName": null,
+    "entrant1": 1,
+    "entrant2": 2,
+    "status": 2,
+    "setWinnerGoesTo": 2,
+    "setLoserGoesTo": null,
+    "winner": null,
+    "loser": null,
+    "games": [
+        {
+            "GameNumber": 1,
+            "Entrant1": {
+                "EntrantId": 2,
+                "EntrantData": {}
+            },
+            "Entrant2": {
+                "EntrantId": 1,
+                "EntrantData": {}
+            },
+            "GameWinner": null,
+            "Status": 0,
+            "Lock": {
+                "Id": 1
+            },
+            "Data": {
+                "main": "Banjo"
+            }
+        }
+    ],
+    "setDecider": {
+        "type": "BestOfDecider",
+        "amountOfWinsRequired": 3
+    },
+    "data": {}
+}
