@@ -14,6 +14,8 @@ class TournamentServer()
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        builder.WebHost.UseUrls("https://localhost:8080", "http://localhost:8081");
+
         var app = builder.Build();
 
         var sh = new ServerHandler();
