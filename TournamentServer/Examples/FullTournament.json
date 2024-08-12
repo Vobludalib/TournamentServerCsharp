@@ -1,78 +1,92 @@
 {
-  "sets": [
-    {
-      "setId": 1,
-      "setName": null,
-      "entrant1": 1,
-      "entrant2": 2,
-      "status": "IncompleteSetup",
-      "setWinnerGoesTo": 2,
-      "setLoserGoesTo": null,
-      "winner": null,
-      "loser": null,
-      "games": [],
-      "setDecider": {
-        "type": "BestOfDecider",
-        "amountOfWinsRequired": 3
-      },
-      "data": {}
-    },
-    {
-      "setId": 2,
-      "setName": null,
-      "entrant1": 3,
-      "entrant2": null,
-      "status": "IncompleteSetup",
-      "setWinnerGoesTo": null,
-      "setLoserGoesTo": null,
-      "winner": null,
-      "loser": null,
-      "games": [],
-      "setDecider": null,
-      "data": {}
-    }
-  ],
-  "entrants": [
-    {
-      "type": "IndividualEntrant",
-      "entrantId": 3,
-      "individualName": {
-        "firstName": "John",
-        "lastName": "McEnroe"
-      },
-      "entrantData": {}
-    },
-    {
-      "type": "TeamEntrant",
-      "entrantId": 4,
-      "individualEntrants": [
+    "sets": [
         {
-          "type": "IndividualEntrant",
-          "entrantId": 1,
-          "individualName": {
-            "firstName": "Simon",
-            "lastName": "Libricky"
-          },
-          "entrantData": {
-            "dateOfBirth": "1/1/1970"
-          }
+            "setId": 1,
+            "setName": null,
+            "entrant1": 1,
+            "entrant2": 2,
+            "status": "InProgress",
+            "setWinnerGoesTo": 2,
+            "setLoserGoesTo": null,
+            "winner": null,
+            "loser": null,
+            "games": [
+                {
+                    "gameNumber": 1,
+                    "entrant1": 2,
+                    "entrant2": 1,
+                    "gameWinner": null,
+                    "status": "Waiting",
+                    "lock": {
+                        "id": 1
+                    },
+                    "data": {
+                        "main": "Banjo"
+                    }
+                }
+            ],
+            "setDecider": {
+                "type": "BestOfDecider",
+                "amountOfWinsRequired": 3
+            },
+            "data": {}
         },
         {
-          "type": "IndividualEntrant",
-          "entrantId": 2,
-          "individualName": {
-            "tag": "DonB"
-          },
-          "entrantData": {}
+            "setId": 2,
+            "setName": null,
+            "entrant1": 3,
+            "entrant2": null,
+            "status": "IncompleteSetup",
+            "setWinnerGoesTo": null,
+            "setLoserGoesTo": null,
+            "winner": null,
+            "loser": null,
+            "games": [],
+            "setDecider": null,
+            "data": {}
         }
-      ],
-      "teamName": "Good team",
-      "entrantData": {}
-    }
-  ],
-  "data": {
-    "time": "11:00:00",
-    "city":  "Atlantis"
-  },
-  "status": "InProgress"
+    ],
+    "entrants": [
+        {
+            "type": "IndividualEntrant",
+            "entrantId": 1,
+            "individualName": {
+                "firstName": "Alena",
+                "lastName": "Libricka"
+            },
+            "entrantData": {}
+        },
+        {
+            "type": "TeamEntrant",
+            "entrantId": 4,
+            "individualEntrants": [
+                {
+                    "type": "IndividualEntrant",
+                    "entrantId": 3,
+                    "individualName": {
+                        "firstName": "Simon",
+                        "lastName": "Libricky"
+                    },
+                    "entrantData": {
+                        "dateOfBirth": "11/10/2004"
+                    }
+                },
+                {
+                    "type": "IndividualEntrant",
+                    "entrantId": 2,
+                    "individualName": {
+                        "tag": "DonB"
+                    },
+                    "entrantData": {}
+                }
+            ],
+            "teamName": "Good team",
+            "entrantData": {}
+        }
+    ],
+    "data": {
+        "time": "11:00:00",
+        "city": "Prague"
+    },
+    "status": "InProgress"
 }
