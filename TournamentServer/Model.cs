@@ -389,7 +389,7 @@ public class Tournament
     /// <returns>Bool - Returns true on success, otherwise false</returns>
     public async Task<bool> AddEntrantAsync(Entrant entrant)
     {
-        var statusLock = await _lockHandler.LockStatusReadAsync();
+        using (var statusLock = await _lockHandler.LockStatusReadAsync())
         {
             if (_status != TournamentStatus.Setup)
                 return false;
