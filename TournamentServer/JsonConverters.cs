@@ -447,7 +447,7 @@ public class SetConverter : JsonConverter<Set>
         JsonSerializerOptions options
     )
     {
-        return (Set?)JsonSerializer.Deserialize(ref reader, typeof(Set), options);
+        throw new NotImplementedException();
     }
 
     /// <summary>
@@ -477,6 +477,7 @@ public class SetConverter : JsonConverter<Set>
         writer.WriteStartObject();
         foreach (var property in value.GetType().GetProperties())
         {
+            if (property.Name.Contains("Lock")) continue;
             writer.WritePropertyName(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
             if (property.Name == nameof(value.SetWinnerGoesTo))
             {
